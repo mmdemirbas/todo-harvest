@@ -676,6 +676,163 @@ class TestJiraStatusEdgeCases:
         assert result["status"] == "todo"
 
 
+class TestConfigDrivenMappings:
+    """Verify config-driven status_map, priority_map, and field_map."""
+
+    def test_jira_custom_status_map(self):
+        raw = {
+            "key": "X-1",
+            "fields": {
+                "summary": "t",
+                "status": {"name": "Ertelendi", "statusCategory": {"key": "new"}},
+            },
+        }
+        cfg = {"status_map": {"Ertelendi": "cancelled"}}
+        result = normalize("jira", raw, cfg)
+        assert result["status"] == "cancelled"
+
+    def test_jira_custom_priority_map(self):
+        raw = {
+            "key": "X-1",
+            "fields": {
+                "summary": "t",
+                "status": {"statusCategory": {"key": "new"}},
+                "priority": {"name": "Orta"},
+            },
+        }
+        cfg = {"priority_map": {"Orta": "medium"}}
+        result = normalize("jira", raw, cfg)
+        assert result["priority"] == "medium"
+
+    def test_jira_unmapped_priority_falls_back(self):
+        raw = {
+            "key": "X-1",
+            "fields": {
+                "summary": "t",
+                "status": {"statusCategory": {"key": "new"}},
+                "priority": {"name": "High"},
+            },
+        }
+        cfg = {"priority_map": {"Orta": "medium"}}
+        result = normalize("jira", raw, cfg)
+        assert result["priority"] == "high"
+
+    def test_notion_field_map_status(self):
+        raw = {
+            "id": "p", "_database_id": "db", "_database_title": "DB",
+            "properties": {
+                "Name": {"type": "title", "title": [{"plain_text": "Task"}]},
+                "Durum": {"type": "status", "status": {"name": "Done"}},
+            },
+        }
+        cfg = {"field_map": {"status": "Durum"}}
+        result = normalize("notion", raw, cfg)
+        assert result["status"] == "done"
+
+    def test_notion_status_type_handled(self):
+        raw = {
+            "id": "p", "_database_id": "db", "_database_title": "DB",
+            "properties": {
+                "Name": {"type": "title", "title": [{"plain_text": "Task"}]},
+                "Status": {"type": "status", "status": {"name": "In Progress"}},
+            },
+        }
+        result = normalize("notion", raw)
+        assert result["status"] == "in_progress"
+
+    def test_notion_custom_status_map(self):
+        raw = {
+            "id": "p", "_database_id": "db", "_database_title": "DB",
+            "properties": {
+                "Name": {"type": "title", "title": [{"plain_text": "Task"}]},
+                "Status": {"type": "status", "status": {"name": "Today"}},
+            },
+        }
+        cfg = {"status_map": {"Today": "in_progress"}}
+        result = normalize("notion", raw, cfg)
+        assert result["status"] == "in_progress"
+
+    def test_notion_field_map_priority(self):
+        raw = {
+            "id": "p", "_database_id": "db", "_database_title": "DB",
+            "properties": {
+                "Name": {"type": "title", "title": [{"plain_text": "Task"}]},
+                "Acil": {"type": "select", "select": {"name": "⭐⭐⭐"}},
+            },
+        }
+        cfg = {
+            "field_map": {"priority": "Acil"},
+            "priority_map": {"⭐⭐⭐": "critical"},
+        }
+        result = normalize("notion", raw, cfg)
+        assert result["priority"] == "critical"
+
+    def test_notion_field_map_due_date(self):
+        raw = {
+            "id": "p", "_database_id": "db", "_database_title": "DB",
+            "properties": {
+                "Name": {"type": "title", "title": [{"plain_text": "Task"}]},
+                "Tarih": {"type": "date", "date": {"start": "2024-06-01"}},
+            },
+        }
+        cfg = {"field_map": {"due_date": "Tarih"}}
+        result = normalize("notion", raw, cfg)
+        assert result["due_date"] == "2024-06-01"
+
+    def test_notion_field_map_tags(self):
+        raw = {
+            "id": "p", "_database_id": "db", "_database_title": "DB",
+            "properties": {
+                "Name": {"type": "title", "title": [{"plain_text": "Task"}]},
+                "Etiket": {"type": "multi_select", "multi_select": [
+                    {"name": "Acil"}, {"name": "Kısa"},
+                ]},
+            },
+        }
+        cfg = {"field_map": {"tags": "Etiket"}}
+        result = normalize("notion", raw, cfg)
+        assert result["tags"] == ["Acil", "Kısa"]
+
+    def test_notion_field_map_category(self):
+        raw = {
+            "id": "p", "_database_id": "db", "_database_title": "DB",
+            "properties": {
+                "Name": {"type": "title", "title": [{"plain_text": "Task"}]},
+                "Epik": {"type": "select", "select": {"name": "Spark"}},
+            },
+        }
+        cfg = {"field_map": {"category": "Epik"}}
+        result = normalize("notion", raw, cfg)
+        assert result["category"]["name"] == "Spark"
+
+    def test_notion_field_map_description(self):
+        raw = {
+            "id": "p", "_database_id": "db", "_database_title": "DB",
+            "properties": {
+                "Name": {"type": "title", "title": [{"plain_text": "Task"}]},
+                "Notlar": {"type": "rich_text", "rich_text": [
+                    {"plain_text": "Some notes"},
+                ]},
+            },
+        }
+        cfg = {"field_map": {"description": "Notlar"}}
+        result = normalize("notion", raw, cfg)
+        assert result["description"] == "Some notes"
+
+    def test_no_config_uses_defaults(self):
+        raw = {
+            "id": "p", "_database_id": "db", "_database_title": "DB",
+            "properties": {
+                "Name": {"type": "title", "title": [{"plain_text": "Task"}]},
+                "Status": {"type": "select", "select": {"name": "Done"}},
+                "Priority": {"type": "select", "select": {"name": "High"}},
+            },
+        }
+        result = normalize("notion", raw)
+        assert result["status"] == "done"
+        assert result["priority"] == "high"
+
+
 class TestStripHtml:
     def test_strips_basic_tags(self):
         assert _strip_html("<p>Hello</p>") == "Hello"
