@@ -16,14 +16,12 @@ def _strip_html(text: str) -> str:
     return " ".join(cleaned.split())
 
 
+_NORMALIZERS: dict[str, object] = {}  # populated after function definitions
+
+
 def normalize(source: str, raw: dict) -> dict:
     """Dispatch to the correct normalizer based on source name."""
-    normalizers = {
-        "jira": _normalize_jira,
-        "notion": _normalize_notion,
-        "msftodo": _normalize_msftodo,
-    }
-    fn = normalizers.get(source)
+    fn = _NORMALIZERS.get(source)
     if fn is None:
         raise ValueError(f"Unknown source: {source}")
     return fn(raw)
@@ -47,6 +45,10 @@ _JIRA_PRIORITY_MAP = {
     "lowest": "low",
 }
 
+# Jira Classic "Epic Link" custom field. Next-gen (team-managed) projects
+# use parent/child hierarchy instead and this field does not exist.
+_JIRA_EPIC_LINK_FIELD = "customfield_10014"
+
 
 def _normalize_jira(raw: dict) -> dict:
     fields = raw.get("fields", {})
@@ -62,12 +64,8 @@ def _normalize_jira(raw: dict) -> dict:
         status = "cancelled"
 
     # Priority
-    priority_raw = fields.get("priority")
-    if priority_raw and isinstance(priority_raw, dict):
-        priority_name = priority_raw.get("name", "").lower()
-        priority = _JIRA_PRIORITY_MAP.get(priority_name, "none")
-    else:
-        priority = "none"
+    priority_name = (fields.get("priority") or {}).get("name", "").lower()
+    priority = _JIRA_PRIORITY_MAP.get(priority_name, "none")
 
     # Description — extract plain text from Atlassian Document Format
     description = _extract_adf_text(fields.get("description"))
@@ -126,8 +124,7 @@ def _jira_category(fields: dict) -> dict:
                 "type": "epic",
             }
 
-    # Check customfield_10014 (Epic Link in some Jira configurations)
-    epic_link = fields.get("customfield_10014")
+    epic_link = fields.get(_JIRA_EPIC_LINK_FIELD)
     if epic_link:
         return {
             "id": str(epic_link),
@@ -200,13 +197,14 @@ def _normalize_notion(raw: dict) -> dict:
 
     # Tags — from Tags multi-select + any Epic/Category/Project select/multi-select
     tags = _notion_multi_select_values(props, "Tags")
-    for prop_name in _NOTION_TAG_PROPERTIES:
-        for actual_name, prop in props.items():
-            if actual_name.lower() == prop_name:
-                if prop.get("type") == "select" and prop.get("select"):
-                    tags.append(prop["select"]["name"])
-                elif prop.get("type") == "multi_select":
-                    tags.extend(ms["name"] for ms in prop.get("multi_select", []))
+    for actual_name, prop in props.items():
+        if actual_name.lower() in _NOTION_TAG_PROPERTIES:
+            if prop.get("type") == "select" and prop.get("select"):
+                tags.append(prop["select"]["name"])
+            elif prop.get("type") == "multi_select":
+                tags.extend(ms["name"] for ms in prop.get("multi_select", []))
+    # Deduplicate while preserving order
+    tags = list(dict.fromkeys(tags))
 
     # URL
     url = raw.get("url")
@@ -371,3 +369,11 @@ def _normalize_msftodo(raw: dict) -> dict:
         "category": category,
         "raw": raw,
     }
+
+
+# Populate the dispatch table now that all functions are defined
+_NORMALIZERS.update({
+    "jira": _normalize_jira,
+    "notion": _normalize_notion,
+    "msftodo": _normalize_msftodo,
+})

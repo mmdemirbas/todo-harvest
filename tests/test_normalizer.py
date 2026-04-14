@@ -365,6 +365,21 @@ class TestNormalizeNotion:
         result = normalize("notion", pages[1])
         assert result["tags"] == []
 
+    def test_tags_deduplicated(self):
+        """If Tags multi-select and Epic select have the same value, no duplicate."""
+        raw = {
+            "id": "p-dedup", "_database_id": "db", "_database_title": "DB",
+            "properties": {
+                "Name": {"type": "title", "title": [{"plain_text": "t"}]},
+                "Tags": {"type": "multi_select", "multi_select": [
+                    {"name": "Q1 Goals"}
+                ]},
+                "Epic": {"type": "select", "select": {"name": "Q1 Goals"}},
+            },
+        }
+        result = normalize("notion", raw)
+        assert result["tags"].count("Q1 Goals") == 1
+
     def test_url(self, pages):
         result = normalize("notion", pages[0])
         assert result["url"] == "https://www.notion.so/Task-Board-page001"
