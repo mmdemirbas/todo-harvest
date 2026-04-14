@@ -13,6 +13,13 @@ from src.sources._http import (
 
 PAGE_SIZE = 100
 
+# Only fetch the fields the normalizer actually uses
+JIRA_FIELDS = [
+    "summary", "description", "status", "priority", "issuetype",
+    "project", "created", "updated", "duedate", "labels",
+    "parent", "customfield_10014",
+]
+
 
 class JiraAuthError(SourceAuthError):
     """Raised when Jira authentication fails."""
@@ -69,7 +76,7 @@ def fetch_all(config: dict, console: Console | None = None) -> list[dict]:
                 "jql": "ORDER BY created DESC",
                 "maxResults": PAGE_SIZE,
                 "startAt": start_at,
-                "fields": "*all",
+                "fields": ",".join(JIRA_FIELDS),
             }
             resp = _request(
                 client, "GET", f"{base_url}/rest/api/3/search", params=params
