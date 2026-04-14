@@ -5,6 +5,7 @@ __pycache__/
 venv/
 output/
 config.yaml
+.todo_harvest_msal_cache.json
 .pytest_cache/
 htmlcov/
 .coverage

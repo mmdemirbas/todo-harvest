@@ -1,6 +1,7 @@
 """Tests for Microsoft To Do source module."""
 
 import json
+import os
 import pytest
 import httpx
 import respx
@@ -12,6 +13,9 @@ from src.sources.msftodo import (
     _fetch_lists,
     _fetch_tasks_for_list,
     _get_token,
+    _save_cache,
+    _migrate_old_cache,
+    _get_cache_path,
     MsftodoAuthError,
     MsftodoFetchError,
     GRAPH_BASE,
@@ -46,9 +50,17 @@ def _mock_get_token(monkeypatch):
     )
 
 
+def _patch_cache_path(monkeypatch, tmp_path):
+    """Redirect cache to a temp directory to avoid touching real XDG dirs."""
+    cache_dir = tmp_path / ".config" / "todo-harvest"
+    monkeypatch.setattr("src.sources.msftodo._get_cache_dir", lambda: cache_dir)
+    monkeypatch.setattr("src.sources.msftodo._get_cache_path", lambda: cache_dir / "msal_cache.json")
+    return cache_dir / "msal_cache.json"
+
+
 class TestGetToken:
     def test_silent_acquisition(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("src.sources.msftodo.TOKEN_CACHE_FILE", tmp_path / "cache.json")
+        _patch_cache_path(monkeypatch, tmp_path)
 
         mock_app = MagicMock()
         mock_app.get_accounts.return_value = [{"username": "user@test.com"}]
@@ -60,8 +72,29 @@ class TestGetToken:
         assert token == "cached-token"
         mock_app.acquire_token_silent.assert_called_once()
 
+    def test_silent_acquisition_failure_falls_through_to_device_code(self, tmp_path, monkeypatch):
+        """When acquire_token_silent returns None, device code flow is used."""
+        _patch_cache_path(monkeypatch, tmp_path)
+
+        mock_app = MagicMock()
+        mock_app.get_accounts.return_value = [{"username": "user@test.com"}]
+        mock_app.acquire_token_silent.return_value = None
+        mock_app.initiate_device_flow.return_value = {
+            "user_code": "XYZ789",
+            "verification_uri": "https://microsoft.com/devicelogin",
+        }
+        mock_app.acquire_token_by_device_flow.return_value = {
+            "access_token": "device-token"
+        }
+
+        with patch("src.sources.msftodo.msal.PublicClientApplication", return_value=mock_app):
+            token = _get_token("client-id", "consumers")
+
+        assert token == "device-token"
+        mock_app.initiate_device_flow.assert_called_once()
+
     def test_device_code_flow(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("src.sources.msftodo.TOKEN_CACHE_FILE", tmp_path / "cache.json")
+        _patch_cache_path(monkeypatch, tmp_path)
 
         mock_app = MagicMock()
         mock_app.get_accounts.return_value = []
@@ -79,7 +112,7 @@ class TestGetToken:
         assert token == "new-token"
 
     def test_device_code_flow_failure(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("src.sources.msftodo.TOKEN_CACHE_FILE", tmp_path / "cache.json")
+        _patch_cache_path(monkeypatch, tmp_path)
 
         mock_app = MagicMock()
         mock_app.get_accounts.return_value = []
@@ -97,7 +130,7 @@ class TestGetToken:
                 _get_token("client-id", "consumers")
 
     def test_initiate_flow_failure(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("src.sources.msftodo.TOKEN_CACHE_FILE", tmp_path / "cache.json")
+        _patch_cache_path(monkeypatch, tmp_path)
 
         mock_app = MagicMock()
         mock_app.get_accounts.return_value = []
@@ -110,8 +143,7 @@ class TestGetToken:
                 _get_token("client-id", "consumers")
 
     def test_cache_persistence(self, tmp_path, monkeypatch):
-        cache_path = tmp_path / "cache.json"
-        monkeypatch.setattr("src.sources.msftodo.TOKEN_CACHE_FILE", cache_path)
+        cache_path = _patch_cache_path(monkeypatch, tmp_path)
 
         mock_cache = MagicMock()
         mock_cache.has_state_changed = True
@@ -125,7 +157,88 @@ class TestGetToken:
              patch("src.sources.msftodo.msal.SerializableTokenCache", return_value=mock_cache):
             _get_token("client-id", "consumers")
 
+        assert cache_path.exists()
         assert cache_path.read_text() == '{"cached": true}'
+
+
+class TestSaveCache:
+    def test_creates_directory_and_file(self, tmp_path):
+        cache_path = tmp_path / "subdir" / "cache.json"
+        mock_cache = MagicMock()
+        mock_cache.has_state_changed = True
+        mock_cache.serialize.return_value = '{"token": "data"}'
+
+        _save_cache(mock_cache, cache_path)
+
+        assert cache_path.exists()
+        assert cache_path.read_text() == '{"token": "data"}'
+
+    def test_file_permissions_are_restrictive(self, tmp_path):
+        cache_path = tmp_path / "cache.json"
+        mock_cache = MagicMock()
+        mock_cache.has_state_changed = True
+        mock_cache.serialize.return_value = "{}"
+
+        _save_cache(mock_cache, cache_path)
+
+        mode = os.stat(cache_path).st_mode & 0o777
+        assert mode == 0o600
+
+    def test_no_write_when_cache_unchanged(self, tmp_path):
+        cache_path = tmp_path / "cache.json"
+        mock_cache = MagicMock()
+        mock_cache.has_state_changed = False
+
+        _save_cache(mock_cache, cache_path)
+
+        assert not cache_path.exists()
+
+    def test_atomic_write_cleans_up_on_error(self, tmp_path):
+        cache_path = tmp_path / "cache.json"
+        mock_cache = MagicMock()
+        mock_cache.has_state_changed = True
+        mock_cache.serialize.side_effect = RuntimeError("serialize failed")
+
+        with pytest.raises(RuntimeError, match="serialize failed"):
+            _save_cache(mock_cache, cache_path)
+
+        assert not cache_path.exists()
+        # No temp files left behind
+        assert list(tmp_path.iterdir()) == []
+
+
+class TestMigrateOldCache:
+    def test_migrates_old_cache_to_new_location(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        old_path = tmp_path / ".todo_harvest_msal_cache.json"
+        old_path.write_text('{"old": true}')
+
+        new_path = tmp_path / "new" / "cache.json"
+        _migrate_old_cache(new_path)
+
+        assert not old_path.exists()
+        assert new_path.exists()
+        assert new_path.read_text() == '{"old": true}'
+
+    def test_skips_migration_when_new_exists(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        old_path = tmp_path / ".todo_harvest_msal_cache.json"
+        old_path.write_text('{"old": true}')
+
+        new_path = tmp_path / "new" / "cache.json"
+        new_path.parent.mkdir(parents=True)
+        new_path.write_text('{"new": true}')
+
+        _migrate_old_cache(new_path)
+
+        assert old_path.exists()  # Old file NOT deleted
+        assert new_path.read_text() == '{"new": true}'  # New file NOT overwritten
+
+    def test_skips_migration_when_old_missing(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        new_path = tmp_path / "new" / "cache.json"
+        _migrate_old_cache(new_path)
+        assert not new_path.exists()
 
 
 class TestFetchLists:
@@ -200,7 +313,6 @@ class TestFetchAll:
         respx.get(LISTS_URL).mock(
             return_value=httpx.Response(200, json=lists_fixture)
         )
-        # Each list returns the same tasks for simplicity
         empty_tasks = {"value": []}
         respx.get(f"{GRAPH_BASE}/me/todo/lists/list-001/tasks").mock(
             return_value=httpx.Response(200, json=tasks_fixture)

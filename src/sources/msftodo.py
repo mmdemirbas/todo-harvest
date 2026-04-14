@@ -1,6 +1,7 @@
 """Microsoft To Do source via MS Graph API with MSAL device code auth."""
 
-import json
+import os
+import tempfile
 import time
 from pathlib import Path
 
@@ -10,11 +11,20 @@ from rich.console import Console
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 SCOPES = ["Tasks.Read"]
-TOKEN_CACHE_FILE = Path(".todo_harvest_msal_cache.json")
+_OLD_CACHE_FILENAME = ".todo_harvest_msal_cache.json"
 DEFAULT_TIMEOUT = 30.0
 MAX_RETRIES = 3
 RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
 BACKOFF_BASE = 1.0
+
+
+def _get_cache_dir() -> Path:
+    """Return the XDG-compliant cache directory for todo-harvest."""
+    return Path.home() / ".config" / "todo-harvest"
+
+
+def _get_cache_path() -> Path:
+    return _get_cache_dir() / "msal_cache.json"
 
 
 class MsftodoAuthError(Exception):
@@ -27,9 +37,12 @@ class MsftodoFetchError(Exception):
 
 def _get_token(client_id: str, tenant_id: str, console: Console | None = None) -> str:
     """Acquire an access token via device code flow with persistent cache."""
+    cache_path = _get_cache_path()
+    _migrate_old_cache(cache_path)
+
     cache = msal.SerializableTokenCache()
-    if TOKEN_CACHE_FILE.exists():
-        cache.deserialize(TOKEN_CACHE_FILE.read_text(encoding="utf-8"))
+    if cache_path.exists():
+        cache.deserialize(cache_path.read_text(encoding="utf-8"))
 
     authority = f"https://login.microsoftonline.com/{tenant_id}"
     app = msal.PublicClientApplication(
@@ -41,7 +54,7 @@ def _get_token(client_id: str, tenant_id: str, console: Console | None = None) -
     if accounts:
         result = app.acquire_token_silent(SCOPES, account=accounts[0])
         if result and "access_token" in result:
-            _save_cache(cache)
+            _save_cache(cache, cache_path)
             return result["access_token"]
 
     # Fall back to device code flow
@@ -64,13 +77,38 @@ def _get_token(client_id: str, tenant_id: str, console: Console | None = None) -
         error = result.get("error_description", result.get("error", "unknown error"))
         raise MsftodoAuthError(f"Microsoft authentication failed: {error}")
 
-    _save_cache(cache)
+    _save_cache(cache, cache_path)
     return result["access_token"]
 
 
-def _save_cache(cache: msal.SerializableTokenCache) -> None:
-    if cache.has_state_changed:
-        TOKEN_CACHE_FILE.write_text(cache.serialize(), encoding="utf-8")
+def _migrate_old_cache(new_path: Path) -> None:
+    """Move the old cwd-relative cache file to the new XDG location."""
+    old_path = Path(_OLD_CACHE_FILENAME)
+    if old_path.exists() and not new_path.exists():
+        new_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        old_path.rename(new_path)
+        os.chmod(new_path, 0o600)
+
+
+def _save_cache(cache: msal.SerializableTokenCache, cache_path: Path) -> None:
+    """Write cache atomically: write to temp file, then rename."""
+    if not cache.has_state_changed:
+        return
+    cache_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd, tmp_path = tempfile.mkstemp(
+        dir=cache_path.parent, prefix=".msal_cache_", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(cache.serialize())
+        os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, cache_path)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 def _request_with_retry(
