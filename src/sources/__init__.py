@@ -3,9 +3,12 @@
 Each source module exposes:
 - pull(config, console) -> list[dict]   — fetch raw API payloads
 - push(config, tasks, console) -> dict  — write tasks to service (or NotImplementedError)
-- normalize(raw) -> NormalizedItem      — unified schema (via normalizer.py)
 
-To add a new source: create the module, then add one entry to REGISTRY below.
+Normalization functions (normalize_vikunja, normalize_jira, etc.) live in
+src/normalizer.py and are dispatched through SourceDef.normalize().
+
+To add a new source: create the module, add a normalize function to
+normalizer.py, then add one entry to REGISTRY below.
 """
 
 from __future__ import annotations

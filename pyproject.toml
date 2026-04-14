@@ -1,7 +1,7 @@
 [project]
 name = "todo-harvest"
 version = "0.1.0"
-description = "Collect TODO items from Microsoft To Do, Jira, and Notion"
+description = "Sync TODO items between Vikunja, Jira, Microsoft To Do, and Notion"
 requires-python = ">= 3.10"
 dependencies = [
     "httpx>=0.27",
