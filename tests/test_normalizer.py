@@ -689,19 +689,22 @@ class TestUnifiedSchema:
     """Verify that all normalizers produce the same schema shape."""
 
     REQUIRED_KEYS = {
-        "id", "source", "title", "description", "status", "priority",
+        "id", "local_id", "source", "title", "description", "status", "priority",
         "created_date", "due_date", "updated_date", "tags", "url",
         "category", "raw",
     }
     CATEGORY_KEYS = {"id", "name", "type"}
-    VALID_SOURCES = {"jira", "notion", "msftodo"}
+    VALID_SOURCES = {"vikunja", "jira", "notion", "msftodo"}
     VALID_STATUSES = {"todo", "in_progress", "done", "cancelled"}
     VALID_PRIORITIES = {"critical", "high", "medium", "low", "none"}
 
-    @pytest.fixture(params=["jira", "notion", "msftodo"])
+    @pytest.fixture(params=["vikunja", "jira", "notion", "msftodo"])
     def sample(self, request):
         source = request.param
-        if source == "jira":
+        if source == "vikunja":
+            with open(FIXTURES_DIR / "vikunja_tasks.json") as f:
+                raw = json.load(f)[0]
+        elif source == "jira":
             with open(FIXTURES_DIR / "jira_issues.json") as f:
                 raw = json.load(f)["issues"][0]
         elif source == "notion":

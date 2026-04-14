@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1,
+    "title": "Infrastructure",
+    "description": "DevOps and infrastructure tasks",
+    "is_archived": false,
+    "created": "2024-01-01T00:00:00Z",
+    "updated": "2024-01-15T00:00:00Z"
+  },
+  {
+    "id": 2,
+    "title": "Archive",
+    "description": "Archived tasks",
+    "is_archived": true,
+    "created": "2020-01-01T00:00:00Z",
+    "updated": "2020-06-01T00:00:00Z"
+  }
+]
