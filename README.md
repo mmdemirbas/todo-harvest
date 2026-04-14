@@ -223,6 +223,12 @@ The `raw` field preserves the complete API response for each task, including sou
 | "tasks skipped: no Vikunja mapping found" | Set `default_project_id` under `vikunja:` in config.yaml — new tasks from other sources are created there |
 | "Invalid model provided" on update | Ensure the task is a POST to `/api/v1/tasks/{numeric-id}` — an older bug stored prefixed IDs in mapping.db; `rm mapping.db` and re-pull fixes it |
 
+Password reset:
+```bash
+docker compose exec vikunja /app/vikunja/vikunja user list
+docker compose exec vikunja /app/vikunja/vikunja user reset-password 1 -d
+```
+
 ### General
 
 | Error | Fix |
