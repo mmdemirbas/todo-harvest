@@ -1,0 +1,26 @@
+{
+  "value": [
+    {
+      "id": "list-001",
+      "displayName": "Personal",
+      "isOwner": true,
+      "isShared": false,
+      "wellknownListName": "none"
+    },
+    {
+      "id": "list-002",
+      "displayName": "Work Tasks",
+      "isOwner": true,
+      "isShared": false,
+      "wellknownListName": "none"
+    },
+    {
+      "id": "list-003",
+      "displayName": "Grocery List",
+      "isOwner": true,
+      "isShared": true,
+      "wellknownListName": "none"
+    }
+  ],
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('user')/todo/lists"
+}

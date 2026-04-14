@@ -1,0 +1,94 @@
+{
+  "value": [
+    {
+      "id": "task-001",
+      "title": "Buy groceries",
+      "body": {
+        "content": "Milk, eggs, bread",
+        "contentType": "text"
+      },
+      "status": "notStarted",
+      "importance": "high",
+      "isReminderOn": false,
+      "createdDateTime": "2024-01-10T08:00:00.0000000Z",
+      "lastModifiedDateTime": "2024-01-15T10:00:00.0000000Z",
+      "dueDateTime": {
+        "dateTime": "2024-01-20T00:00:00.0000000",
+        "timeZone": "UTC"
+      },
+      "completedDateTime": null,
+      "categories": ["personal", "shopping"]
+    },
+    {
+      "id": "task-002",
+      "title": "Prepare presentation",
+      "body": {
+        "content": "",
+        "contentType": "text"
+      },
+      "status": "inProgress",
+      "importance": "normal",
+      "isReminderOn": true,
+      "createdDateTime": "2024-01-12T14:30:00.0000000Z",
+      "lastModifiedDateTime": "2024-01-18T09:00:00.0000000Z",
+      "dueDateTime": null,
+      "completedDateTime": null,
+      "categories": []
+    },
+    {
+      "id": "task-003",
+      "title": "Ünïcödé task — special chars: <>&\"'",
+      "body": {
+        "content": "Test unicode: 日本語テスト",
+        "contentType": "text"
+      },
+      "status": "completed",
+      "importance": "low",
+      "isReminderOn": false,
+      "createdDateTime": "2020-03-01T00:00:00.0000000Z",
+      "lastModifiedDateTime": "2020-06-15T12:00:00.0000000Z",
+      "dueDateTime": {
+        "dateTime": "2020-04-01T00:00:00.0000000",
+        "timeZone": "UTC"
+      },
+      "completedDateTime": {
+        "dateTime": "2020-03-28T16:00:00.0000000",
+        "timeZone": "UTC"
+      },
+      "categories": ["legacy"]
+    },
+    {
+      "id": "task-004",
+      "title": "Empty body task",
+      "body": null,
+      "status": "notStarted",
+      "importance": "high",
+      "isReminderOn": false,
+      "createdDateTime": "2024-02-01T10:00:00.0000000Z",
+      "lastModifiedDateTime": "2024-02-01T10:00:00.0000000Z",
+      "dueDateTime": null,
+      "completedDateTime": null,
+      "categories": null
+    },
+    {
+      "id": "task-005",
+      "title": "Cancelled meeting follow-up",
+      "body": {
+        "content": "Review notes from cancelled meeting.",
+        "contentType": "html"
+      },
+      "status": "notStarted",
+      "importance": "normal",
+      "isReminderOn": false,
+      "createdDateTime": "2024-03-10T16:00:00.0000000Z",
+      "lastModifiedDateTime": "2024-03-12T08:00:00.0000000Z",
+      "dueDateTime": {
+        "dateTime": "2024-03-15T00:00:00.0000000",
+        "timeZone": "Pacific Standard Time"
+      },
+      "completedDateTime": null,
+      "categories": ["work", "meetings"]
+    }
+  ],
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('user')/todo/lists('list-001')/tasks"
+}
