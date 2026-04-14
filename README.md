@@ -8,7 +8,7 @@ Sync TODO items between Vikunja, Jira, Microsoft To Do, and Notion via a local s
 git clone <repo-url> && cd todo-harvest
 cp config.example.yaml config.yaml
 # Edit config.yaml with your credentials (see sections below)
-./harvest pull
+./todo pull
 ```
 
 The `harvest` script creates a virtual environment on first run and installs all dependencies automatically.
@@ -16,14 +16,14 @@ The `harvest` script creates a virtual environment on first run and installs all
 ### Usage
 
 ```bash
-./harvest pull                       # pull from all configured services
-./harvest pull jira msftodo          # pull from specific services
-./harvest push vikunja               # push local state to vikunja
-./harvest sync                       # pull all, then push all
-./harvest sync jira vikunja          # sync between jira and vikunja
-./harvest export                     # export local state to JSON/CSV
-./harvest export --output-dir ~/out  # export to custom directory
-./harvest --test                     # run tests with coverage report
+./todo pull                       # pull from all configured services
+./todo pull jira msftodo          # pull from specific services
+./todo push vikunja               # push local state to vikunja
+./todo sync                       # pull all, then push all
+./todo sync jira vikunja          # sync between jira and vikunja
+./todo export                     # export local state to JSON/CSV
+./todo export --output-dir ~/out  # export to custom directory
+./todo --test                     # run tests with coverage report
 ```
 
 ### Local state
@@ -180,13 +180,13 @@ Every task is normalized to a common format regardless of source:
 | Error | Fix |
 |-------|-----|
 | "Config file not found" | Copy `config.example.yaml` to `config.yaml` |
-| "No command specified" | Use: `./harvest pull`, `./harvest push`, or `./harvest sync` |
+| "No command specified" | Use: `./todo pull`, `./todo push`, or `./todo sync` |
 | Network timeout | The tool retries up to 3 times with exponential backoff |
 
 ## Development
 
 ```bash
-./harvest --test                                              # run tests
+./todo --test                                              # run tests
 .venv/bin/python -m pytest tests/test_normalizer.py -v        # specific test
 .venv/bin/python -m pytest --cov=src --cov-report=term-missing  # coverage
 ```

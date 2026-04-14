@@ -19,7 +19,7 @@ console = Console()
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="todo-harvest",
+        prog="todo",
         description="Collect and sync TODO items across services.",
     )
     parser.add_argument(
@@ -53,18 +53,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
+    command = args.command
+    if command is None:
+        console.print("[bold yellow]No command specified.[/] Use: pull, push, sync, or export.")
+        console.print("Run './todo --help' for usage.")
+        return 1
+
     # Load config
     config_path = Path(args.config) if args.config else None
     try:
         config = load_config(config_path)
     except ConfigError as exc:
         console.print(f"[bold red]Configuration error:[/] {exc}")
-        return 1
-
-    command = args.command
-    if command is None:
-        console.print("[bold yellow]No command specified.[/] Use: pull, push, sync, or export.")
-        console.print("Run './harvest --help' for usage.")
         return 1
 
     if command == "export":
