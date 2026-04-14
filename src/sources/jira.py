@@ -67,13 +67,15 @@ def pull(config: dict, console: Console | None = None) -> list[dict]:
         "Accept": "application/json",
     }
 
+    jql = config.get("jql", "assignee = currentUser() ORDER BY created DESC")
+
     issues: list[dict] = []
     next_page_token: str | None = None
 
     with httpx.Client(timeout=DEFAULT_TIMEOUT, headers=headers) as client:
         while True:
             body: dict = {
-                "jql": "ORDER BY created DESC",
+                "jql": jql,
                 "maxResults": PAGE_SIZE,
                 "fields": list(JIRA_FIELDS),
             }

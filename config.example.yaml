@@ -18,7 +18,11 @@ jira:
   base_url: "https://YOUR_SUBDOMAIN.atlassian.net"
   email: "your@email.com"
   api_token: "YOUR_API_TOKEN"
-  # How to get these: see README.md § Jira credentials
+  # jql: "assignee = currentUser() ORDER BY created DESC"  # default
+  # status_map:                    # override status name → unified status
+  #   "Custom Status": "in_progress"
+  # priority_map:                  # override priority name → unified priority
+  #   "Custom Priority": "high"
 
 mstodo:
   client_id: "YOUR_CLIENT_ID"
@@ -30,5 +34,14 @@ notion:
   token: "YOUR_INTEGRATION_SECRET"
   database_ids:
     - "DATABASE_ID_1"
-    # Add more database IDs if you have multiple Notion databases
-  # How to get these: see README.md § Notion credentials
+  # field_map:                     # map Notion column names → unified fields
+  #   status: "Status"
+  #   priority: "Priority"
+  #   due_date: "Due Date"
+  #   tags: "Tags"
+  #   category: "Epic"
+  #   description: "Notes"
+  # status_map:
+  #   "Custom Status": "in_progress"
+  # priority_map:
+  #   "Custom Priority": "high"

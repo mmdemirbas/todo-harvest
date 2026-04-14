@@ -16,13 +16,13 @@ def _strip_html(text: str) -> str:
     return " ".join(cleaned.split())
 
 
-def normalize(source: str, raw: dict) -> dict:
+def normalize(source: str, raw: dict, source_config: dict | None = None) -> dict:
     """Dispatch to the correct normalizer based on source name."""
     from src.sources import REGISTRY
     source_def = REGISTRY.get(source)
     if source_def is None:
         raise ValueError(f"Unknown source: {source}")
-    return source_def.normalize(raw)
+    return source_def.normalize(raw, source_config or {})
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +38,8 @@ _VIKUNJA_PRIORITY_MAP = {
 }
 
 
-def normalize_vikunja(raw: dict) -> dict:
+def normalize_vikunja(raw: dict, source_config: dict | None = None) -> dict:
+    cfg = source_config or {}
     task_id = raw.get("id", "")
 
     # Status: Vikunja uses a 'done' boolean
@@ -112,22 +113,30 @@ _JIRA_PRIORITY_MAP = {
 _JIRA_EPIC_LINK_FIELD = "customfield_10014"
 
 
-def normalize_jira(raw: dict) -> dict:
+def normalize_jira(raw: dict, source_config: dict | None = None) -> dict:
+    cfg = source_config or {}
+    custom_status_map = cfg.get("status_map", {})
+    custom_priority_map = cfg.get("priority_map", {})
+
     fields = raw.get("fields", {})
     key = raw.get("key", raw.get("id", ""))
 
-    # Status
-    status_cat = (fields.get("status") or {}).get("statusCategory", {}).get("key", "")
-    status = _JIRA_STATUS_MAP.get(status_cat, "todo")
+    # Status — config status_map overrides, then category-based fallback
+    status_name = (fields.get("status") or {}).get("name", "")
+    if status_name in custom_status_map:
+        status = custom_status_map[status_name]
+    else:
+        status_cat = (fields.get("status") or {}).get("statusCategory", {}).get("key", "")
+        status = _JIRA_STATUS_MAP.get(status_cat, "todo")
+        if "cancel" in status_name.lower():
+            status = "cancelled"
 
-    # Check for cancelled status name
-    status_name = (fields.get("status") or {}).get("name", "").lower()
-    if "cancel" in status_name:
-        status = "cancelled"
-
-    # Priority
-    priority_name = (fields.get("priority") or {}).get("name", "").lower()
-    priority = _JIRA_PRIORITY_MAP.get(priority_name, "none")
+    # Priority — config priority_map overrides, then built-in fallback
+    priority_raw = (fields.get("priority") or {}).get("name", "")
+    if priority_raw in custom_priority_map:
+        priority = custom_priority_map[priority_raw]
+    else:
+        priority = _JIRA_PRIORITY_MAP.get(priority_raw.lower(), "none")
 
     # Description — extract plain text from Atlassian Document Format
     description = _extract_adf_text(fields.get("description"))
@@ -238,46 +247,87 @@ _NOTION_PRIORITY_MAP = {
 _NOTION_TAG_PROPERTIES = {"epic", "category", "project"}
 
 
-def normalize_notion(raw: dict) -> dict:
+def normalize_notion(raw: dict, source_config: dict | None = None) -> dict:
+    cfg = source_config or {}
+    field_map = cfg.get("field_map", {})
+    custom_status_map = cfg.get("status_map", {})
+    custom_priority_map = cfg.get("priority_map", {})
+
     props = raw.get("properties", {})
 
-    # Title
+    # Title — auto-detect title-type property
     title = _notion_title(props)
 
-    # Description — look for a rich_text property named Description/Notes
-    description = _notion_rich_text(props, "Description") or _notion_rich_text(props, "Notes")
+    # Description — configurable, then fallbacks
+    desc_field = field_map.get("description")
+    if desc_field:
+        description = _notion_rich_text(props, desc_field)
+    else:
+        description = _notion_rich_text(props, "Description") or _notion_rich_text(props, "Notes")
 
-    # Status
-    status_raw = _notion_select_value(props, "Status")
-    status = _NOTION_STATUS_MAP.get((status_raw or "").lower(), "todo") if status_raw else "todo"
+    # Status — configurable field name, handles both select and status types
+    status_field = field_map.get("status", "Status")
+    status_raw = _notion_prop_value(props, status_field)
+    if status_raw and status_raw in custom_status_map:
+        status = custom_status_map[status_raw]
+    elif status_raw:
+        status = _NOTION_STATUS_MAP.get(status_raw.lower(), "todo")
+    else:
+        status = "todo"
 
-    # Priority
-    priority_raw = _notion_select_value(props, "Priority")
-    priority = _NOTION_PRIORITY_MAP.get((priority_raw or "").lower(), "none") if priority_raw else "none"
+    # Priority — configurable field name
+    priority_field = field_map.get("priority", "Priority")
+    priority_raw = _notion_prop_value(props, priority_field)
+    if priority_raw and priority_raw in custom_priority_map:
+        priority = custom_priority_map[priority_raw]
+    elif priority_raw:
+        priority = _NOTION_PRIORITY_MAP.get(priority_raw.lower(), "none")
+    else:
+        priority = "none"
 
-    # Due date
-    due_date = _notion_date_value(props, "Due Date") or _notion_date_value(props, "Due") or _notion_date_value(props, "Deadline")
+    # Due date — configurable field name
+    due_field = field_map.get("due_date")
+    if due_field:
+        due_date = _notion_date_value(props, due_field)
+    else:
+        due_date = (
+            _notion_date_value(props, "Due Date")
+            or _notion_date_value(props, "Due")
+            or _notion_date_value(props, "Deadline")
+            or _notion_date_value(props, "Tarih")
+        )
 
-    # Tags — from Tags multi-select + any Epic/Category/Project select/multi-select
-    tags = _notion_multi_select_values(props, "Tags")
+    # Tags — configurable field name
+    tags_field = field_map.get("tags", "Tags")
+    tags = _notion_multi_select_values(props, tags_field)
+    # Also pull from any Epic/Category/Project select/multi-select not already mapped
+    mapped_fields = set(field_map.values()) if field_map else set()
     for actual_name, prop in props.items():
-        if actual_name.lower() in _NOTION_TAG_PROPERTIES:
+        if actual_name.lower() in _NOTION_TAG_PROPERTIES and actual_name not in mapped_fields:
             if prop.get("type") == "select" and prop.get("select"):
                 tags.append(prop["select"]["name"])
             elif prop.get("type") == "multi_select":
                 tags.extend(ms["name"] for ms in prop.get("multi_select", []))
-    # Deduplicate while preserving order
     tags = list(dict.fromkeys(tags))
+
+    # Category — configurable, or database
+    cat_field = field_map.get("category")
+    if cat_field:
+        cat_value = _notion_prop_value(props, cat_field)
+        category = {
+            "id": raw.get("_database_id"),
+            "name": cat_value,
+            "type": "database",
+        }
+    else:
+        category = {
+            "id": raw.get("_database_id"),
+            "name": raw.get("_database_title"),
+            "type": "database",
+        }
 
     # URL
     url = raw.get("url")
-
-    # Category — database
-    category = {
-        "id": raw.get("_database_id"),
-        "name": raw.get("_database_title"),
-        "type": "database",
-    }
 
     return {
         "id": f"notion-{raw.get('id', '')}",
@@ -305,6 +355,27 @@ def _notion_title(props: dict) -> str:
             if title_parts:
                 return "".join(part.get("plain_text", "") for part in title_parts)
     return ""
+
+
+def _notion_prop_value(props: dict, name: str) -> str | None:
+    """Get the string value of a select, status, or rich_text property."""
+    prop = props.get(name)
+    if not prop:
+        return None
+    ptype = prop.get("type")
+    if ptype == "select":
+        sel = prop.get("select")
+        return sel.get("name") if sel and isinstance(sel, dict) else None
+    if ptype == "status":
+        st = prop.get("status")
+        return st.get("name") if st and isinstance(st, dict) else None
+    if ptype == "rich_text":
+        parts = prop.get("rich_text", [])
+        return "".join(p.get("plain_text", "") for p in parts) if parts else None
+    if ptype == "multi_select":
+        items = prop.get("multi_select", [])
+        return ", ".join(ms.get("name", "") for ms in items) if items else None
+    return None
 
 
 def _notion_select_value(props: dict, name: str) -> str | None:
@@ -367,7 +438,7 @@ _MSTODO_IMPORTANCE_MAP = {
 }
 
 
-def normalize_mstodo(raw: dict) -> dict:
+def normalize_mstodo(raw: dict, source_config: dict | None = None) -> dict:
     task_id = raw.get("id", "")
 
     # Title

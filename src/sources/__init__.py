@@ -59,9 +59,9 @@ class SourceDef:
         mod = self._load()
         return mod.push(config, tasks, console)
 
-    def normalize(self, raw: dict) -> NormalizedItem:
+    def normalize(self, raw: dict, source_config: dict | None = None) -> NormalizedItem:
         mod = self._load_normalizer()
-        return getattr(mod, self._normalize_fn)(raw)
+        return getattr(mod, self._normalize_fn)(raw, source_config or {})
 
 
 # The single source of truth for available sources.

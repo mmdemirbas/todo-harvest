@@ -146,7 +146,7 @@ def _cmd_pull(config: dict, services: list[str]) -> int:
             normalized = []
             for raw in raw_items:
                 try:
-                    normalized.append(normalize(service, raw))
+                    normalized.append(normalize(service, raw, config.get(service, {})))
                 except Exception as exc:
                     console.print(f"[yellow]Warning:[/] Failed to normalize {service} item: {exc}")
 
