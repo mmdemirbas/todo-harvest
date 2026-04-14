@@ -162,7 +162,7 @@ class TestMain:
         result = main(["--config", str(cfg)])
         assert result == 1
 
-    def test_source_validation_error_skips(self, tmp_path, mock_sources):
+    def test_source_validation_error_skips_but_returns_partial_success(self, tmp_path, mock_sources):
         cfg = tmp_path / "config.yaml"
         cfg.write_text("""
 output:
@@ -175,15 +175,18 @@ notion:
   token: ""
   database_ids: []
 """.format(output_dir=str(tmp_path / "output")))
-        # Only jira should work; notion should be skipped
+        # Jira works but notion skipped → partial success → exit 1
         result = main(["--config", str(cfg), "--source", "jira,notion"])
-        assert result == 0
+        assert result == 1
+        # But output files are still written for the working source
+        assert (tmp_path / "output" / "jira.json").exists()
 
-    def test_fetch_error_continues(self, config_file, tmp_path):
+    def test_fetch_error_continues_with_other_sources(self, config_file, tmp_path):
+        from src.sources.jira import JiraFetchError
         with patch("src.main._fetch_source") as mock_fetch:
             def side_effect(source, config, console):
                 if source == "jira":
-                    raise RuntimeError("Connection failed")
+                    raise JiraFetchError("Connection failed")
                 return [{
                     "id": "task-1", "title": "t", "body": None,
                     "status": "notStarted", "importance": "normal",
@@ -194,17 +197,26 @@ notion:
                 }]
             mock_fetch.side_effect = side_effect
             result = main(["--config", str(config_file), "--source", "jira,msftodo"])
-        assert result == 0
+        # One source failed → exit 1 even though msftodo succeeded
+        assert result == 1
 
-    def test_normalize_error_skips_item(self, config_file, tmp_path):
+    def test_unexpected_fetch_error_shows_traceback(self, config_file, tmp_path):
+        """Unexpected errors (not auth/fetch) show traceback with bug message."""
+        with patch("src.main._fetch_source") as mock_fetch:
+            mock_fetch.side_effect = TypeError("unexpected bug")
+            result = main(["--config", str(config_file), "--source", "jira"])
+        assert result == 1
+
+    def test_all_normalize_errors_returns_1(self, config_file, tmp_path):
+        """When every item fails normalization, exit code is 1."""
         bad_item = {"intentionally": "broken"}
         with patch("src.main._fetch_source", return_value=[bad_item]):
             with patch("src.normalizer.normalize", side_effect=Exception("bad")):
                 result = main(["--config", str(config_file), "--source", "jira"])
-        # No items collected but no crash
-        assert result == 0
+        assert result == 1
 
-    def test_no_items_collected(self, config_file, tmp_path):
+    def test_no_items_collected_clean(self, config_file, tmp_path):
+        """Clean empty result (no errors) returns 0."""
         with patch("src.main._fetch_source", return_value=[]):
             result = main(["--config", str(config_file), "--source", "jira"])
         assert result == 0

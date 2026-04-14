@@ -152,6 +152,30 @@ class TestValidateSource:
         errors = validate_source(config, "jira")
         assert any("missing" in e for e in errors)
 
+    def test_placeholder_your_rejected(self, valid_config):
+        config = load_config(valid_config)
+        config["jira"]["api_token"] = "YOUR_API_TOKEN"
+        errors = validate_source(config, "jira")
+        assert any("placeholder" in e for e in errors)
+
+    def test_placeholder_database_id_rejected(self, valid_config):
+        config = load_config(valid_config)
+        config["msftodo"]["client_id"] = "DATABASE_ID_1"
+        errors = validate_source(config, "msftodo")
+        assert any("placeholder" in e for e in errors)
+
+    def test_placeholder_case_insensitive(self, valid_config):
+        config = load_config(valid_config)
+        config["jira"]["email"] = "your_email@example.com"
+        errors = validate_source(config, "jira")
+        assert any("placeholder" in e for e in errors)
+
+    def test_real_values_pass_placeholder_check(self, valid_config):
+        config = load_config(valid_config)
+        config["jira"]["api_token"] = "ATATTxyz123realtoken"
+        errors = validate_source(config, "jira")
+        assert errors == []
+
 
 class TestEnabledSources:
     def test_all_valid(self, valid_config):

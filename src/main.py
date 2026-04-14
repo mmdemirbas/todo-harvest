@@ -2,14 +2,25 @@
 
 import argparse
 import sys
+import traceback
 from pathlib import Path
 
 from rich.console import Console
 
 from src.config import ConfigError, load_config, enabled_sources, validate_source, SOURCES
+from src.sources.jira import JiraAuthError, JiraFetchError
+from src.sources.notion import NotionAuthError, NotionFetchError
+from src.sources.msftodo import MsftodoAuthError, MsftodoFetchError
 
 
 console = Console()
+
+# Known source errors — catch these specifically for clean messages
+_SOURCE_ERRORS = (
+    JiraAuthError, JiraFetchError,
+    NotionAuthError, NotionFetchError,
+    MsftodoAuthError, MsftodoFetchError,
+)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -81,25 +92,41 @@ def main(argv: list[str] | None = None) -> int:
     output_dir = Path(config["output"]["dir"])
     all_items = []
     source_stats = []
+    had_errors = False
 
     for source in sources:
         errors = validate_source(config, source)
         if errors:
             console.print(f"[bold yellow]Skipping {source}:[/] {'; '.join(errors)}")
+            had_errors = True
             continue
 
         try:
             raw_items = _fetch_source(source, config, console)
-        except Exception as exc:
+        except _SOURCE_ERRORS as exc:
             console.print(f"[bold red]{source} failed:[/] {exc}")
+            had_errors = True
+            continue
+        except Exception as exc:
+            console.print(f"[bold red]{source} unexpected error (bug):[/] {exc}")
+            traceback.print_exc()
+            had_errors = True
             continue
 
         normalized = []
+        normalize_errors = 0
         for raw in raw_items:
             try:
                 normalized.append(normalize(source, raw))
             except Exception as exc:
+                normalize_errors += 1
                 console.print(f"[yellow]Warning:[/] Failed to normalize {source} item: {exc}")
+
+        if normalize_errors > 0 and len(normalized) == 0 and len(raw_items) > 0:
+            console.print(
+                f"[bold red]{source}:[/] All {len(raw_items)} items failed normalization."
+            )
+            had_errors = True
 
         all_items.extend(normalized)
 
@@ -108,11 +135,12 @@ def main(argv: list[str] | None = None) -> int:
             "source": source,
             "items": len(normalized),
             "categories": len(categories),
+            "errors": normalize_errors,
         })
 
     if not all_items:
         console.print("[bold yellow]No items collected from any source.[/]")
-        return 0
+        return 1 if had_errors else 0
 
     # Export
     try:
@@ -142,9 +170,9 @@ def main(argv: list[str] | None = None) -> int:
     console.print(table)
     console.print()
     for f in files:
-        console.print(f"  → {f}")
+        console.print(f"  -> {f}")
 
-    return 0
+    return 1 if had_errors else 0
 
 
 def _fetch_source(source: str, config: dict, console: Console) -> list[dict]:
@@ -160,7 +188,3 @@ def _fetch_source(source: str, config: dict, console: Console) -> list[dict]:
         return fetch_all(config["msftodo"], console)
     else:
         raise ValueError(f"Unknown source: {source}")
-
-
-if __name__ == "__main__":
-    sys.exit(main())

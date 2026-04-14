@@ -87,8 +87,22 @@ def validate_source(config: dict, source: str) -> list[str]:
                 )
             elif not val.strip():
                 errors.append(f"'{source}.{key}' is empty in config.yaml")
+            elif _is_placeholder(val):
+                errors.append(
+                    f"'{source}.{key}' looks like a placeholder — "
+                    "replace it with your actual credential"
+                )
 
     return errors
+
+
+_PLACEHOLDER_PREFIXES = ("YOUR_", "DATABASE_ID", "CHANGE_ME", "TODO", "FIXME")
+
+
+def _is_placeholder(val: str) -> bool:
+    """Detect common placeholder values left over from config.example.yaml."""
+    upper = val.strip().upper()
+    return any(upper.startswith(p) for p in _PLACEHOLDER_PREFIXES)
 
 
 def enabled_sources(config: dict) -> list[str]:
