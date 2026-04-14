@@ -179,6 +179,20 @@ class TestMergePulledItems:
         assert local[0]["title"] == "Restored"
         assert local[0]["local_id"] == lid
 
+    def test_conflict_counter_incremented(self, mapping):
+        """When source and local differ on a field, conflicts stat counts it."""
+        lid = mapping.generate_local_id()
+        mapping.upsert(lid, "jira", "jira-PROJ-1")
+
+        local_item = _make_item("jira", "PROJ-1", title="Local Title", local_id=lid,
+                                status="todo", priority="low")
+        pulled_item = _make_item("jira", "PROJ-1", title="Source Title",
+                                 status="done", priority="high")
+
+        local, stats = merge_pulled_items([local_item], [pulled_item], mapping, "jira")
+        assert stats["conflicts"] >= 3  # title + status + priority differ
+        assert stats["updated"] == 1
+
     def test_empty_pull_returns_local_unchanged(self, mapping):
         local_items = [_make_item("jira", "PROJ-1", local_id="lid-1")]
         local, stats = merge_pulled_items(local_items, [], mapping, "jira")

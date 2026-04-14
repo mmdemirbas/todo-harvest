@@ -96,7 +96,8 @@ def merge_pulled_items(
                 stats["created"] += 1
             else:
                 # Merge fields
-                changed = _merge_fields(local_item, pulled, mapping, local_id, source)
+                changed, field_conflicts = _merge_fields(local_item, pulled, mapping, local_id, source)
+                stats["conflicts"] += field_conflicts
                 if changed:
                     mapping.upsert(
                         local_id, source, source_id,
@@ -122,13 +123,15 @@ def _merge_fields(
     mapping: SyncMapping,
     local_id: str,
     source: str,
-) -> bool:
+) -> tuple[bool, int]:
     """Merge individual fields from pulled_item into local_item.
 
-    Returns True if any field was changed.
+    Returns (changed, conflict_count).
+    A conflict is when both local and source differ and resolution picks a winner.
     """
     last_synced = mapping.get_last_synced_at(local_id, source)
     changed = False
+    conflicts = 0
 
     for field in _MERGE_FIELDS:
         local_val = local_item.get(field)
@@ -144,6 +147,9 @@ def _merge_fields(
             last_synced,
         )
 
+        # Count as conflict whenever values differ (resolution was needed)
+        conflicts += 1
+
         if winner_val != local_val:
             local_item[field] = winner_val
             changed = True
@@ -152,4 +158,4 @@ def _merge_fields(
     local_item["raw"] = pulled_item.get("raw", local_item.get("raw"))
     local_item["url"] = pulled_item.get("url", local_item.get("url"))
 
-    return changed
+    return changed, conflicts
