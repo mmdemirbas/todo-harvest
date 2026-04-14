@@ -1,15 +1,18 @@
 # todo-harvest configuration
 # Copy this file to config.yaml and fill in your credentials.
-# See README.md for detailed setup instructions for each source.
+# See README.md for detailed setup instructions for each service.
+# Only configure the services you want to use — unconfigured ones are skipped.
 
 output:
   dir: ./output
 
-msftodo:
-  client_id: "YOUR_CLIENT_ID"
-  # tenant_id: use "consumers" for personal Microsoft accounts
-  tenant_id: "consumers"
-  # How to get these: see README.md § Microsoft To Do credentials
+mapping:
+  db_path: ./mapping.db
+
+vikunja:
+  base_url: "http://localhost:3456"
+  api_token: "YOUR_API_TOKEN"
+  # How to get: Vikunja UI → Settings → API Tokens → Create token
 
 jira:
   base_url: "https://YOUR_SUBDOMAIN.atlassian.net"
@@ -17,9 +20,15 @@ jira:
   api_token: "YOUR_API_TOKEN"
   # How to get these: see README.md § Jira credentials
 
+msftodo:
+  client_id: "YOUR_CLIENT_ID"
+  # tenant_id: use "consumers" for personal Microsoft accounts
+  tenant_id: "consumers"
+  # How to get these: see README.md § Microsoft To Do credentials
+
 notion:
   token: "YOUR_INTEGRATION_SECRET"
   database_ids:
     - "DATABASE_ID_1"
-    # Add more database IDs if you have multiple Notion databases to harvest
+    # Add more database IDs if you have multiple Notion databases
   # How to get these: see README.md § Notion credentials

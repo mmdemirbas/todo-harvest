@@ -1,6 +1,6 @@
 # todo-harvest
 
-Collect TODO items from Microsoft To Do, Jira, and Notion into a single unified view. Exports to JSON and CSV.
+Sync TODO items between Vikunja, Jira, Microsoft To Do, and Notion via a local state file. Bidirectional for Vikunja; pull-only for Notion.
 
 ## Quick start
 
@@ -8,7 +8,7 @@ Collect TODO items from Microsoft To Do, Jira, and Notion into a single unified 
 git clone <repo-url> && cd todo-harvest
 cp config.example.yaml config.yaml
 # Edit config.yaml with your credentials (see sections below)
-./harvest
+./harvest pull
 ```
 
 The `harvest` script creates a virtual environment on first run and installs all dependencies automatically.
@@ -16,39 +16,45 @@ The `harvest` script creates a virtual environment on first run and installs all
 ### Usage
 
 ```bash
-./harvest                          # fetch all configured sources
-./harvest --source jira            # single source
-./harvest --source msftodo,notion  # multiple sources
-./harvest --output-dir ~/exports   # custom output directory
-./harvest --test                   # run tests with coverage report
+./harvest pull                       # pull from all configured services
+./harvest pull jira msftodo          # pull from specific services
+./harvest push vikunja               # push local state to vikunja
+./harvest sync                       # pull all, then push all
+./harvest sync jira vikunja          # sync between jira and vikunja
+./harvest export                     # export local state to JSON/CSV
+./harvest export --output-dir ~/out  # export to custom directory
+./harvest --test                     # run tests with coverage report
 ```
 
-### Output
+### Local state
 
-All output goes to `./output/` by default (configurable in config.yaml):
+After pulling, your tasks live in `./output/todos.json` (the local source of truth) and `./mapping.db` (ID tracking across services).
 
-- `todos.json` — all items from all sources, sorted by (source, id)
-- `todos.csv` — same data in CSV format, with flattened category fields
-- `jira.json`, `notion.json`, `msftodo.json` — per-source files
-
-Re-running overwrites output files cleanly (idempotent).
+Re-running `pull` merges new data using timestamp-based conflict resolution. Re-running `push` sends resolved local state to the target services.
 
 ## Configuration
 
-All configuration lives in `config.yaml`. Copy `config.example.yaml` and fill in your credentials. Only configure the sources you want to use — unconfigured sources are skipped.
+All configuration lives in `config.yaml`. Copy `config.example.yaml` and fill in your credentials. Only configure the services you want to use — unconfigured ones are skipped.
 
 ```yaml
 output:
   dir: ./output
 
-msftodo:
-  client_id: "YOUR_CLIENT_ID"
-  tenant_id: "consumers"
+mapping:
+  db_path: ./mapping.db
+
+vikunja:
+  base_url: "http://localhost:3456"
+  api_token: "YOUR_API_TOKEN"
 
 jira:
   base_url: "https://YOUR_SUBDOMAIN.atlassian.net"
   email: "your@email.com"
   api_token: "YOUR_API_TOKEN"
+
+msftodo:
+  client_id: "YOUR_CLIENT_ID"
+  tenant_id: "consumers"
 
 notion:
   token: "YOUR_INTEGRATION_SECRET"
@@ -56,19 +62,27 @@ notion:
     - "DATABASE_ID_1"
 ```
 
+## Vikunja credentials
+
+1. Open your Vikunja instance (e.g., `http://localhost:3456`)
+2. Go to Settings -> API Tokens
+3. Create a new token with read/write permissions
+4. Copy the token -> `config.yaml` -> `vikunja.api_token`
+5. Set `vikunja.base_url` to your Vikunja instance URL
+
 ## Microsoft To Do credentials
 
-1. Go to [Azure Portal — App registrations](https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
+1. Go to [Azure Portal - App registrations](https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
 2. Click **New registration**
 3. Name: anything (e.g. "todo-harvest")
 4. Supported account types: **Personal Microsoft accounts only**
 5. Click **Register**
 6. Under **Authentication** in the left sidebar:
-   - Click **Add a platform** → **Mobile and desktop applications**
+   - Click **Add a platform** -> **Mobile and desktop applications**
    - Check the redirect URI: `https://login.microsoftonline.com/common/oauth2/nativeclient`
-   - Scroll down and enable **Allow public client flows** → Yes
+   - Scroll down and enable **Allow public client flows** -> Yes
    - Click **Save**
-7. Copy the **Application (client) ID** from the Overview page → `config.yaml` → `msftodo.client_id`
+7. Copy the **Application (client) ID** from the Overview page -> `config.yaml` -> `msftodo.client_id`
 8. Set `tenant_id` to `"consumers"` (for personal Microsoft accounts)
 
 On first run, the tool prints a device code and URL. Open the URL in your browser, enter the code, and sign in. The token is cached locally for subsequent runs.
@@ -78,7 +92,7 @@ On first run, the tool prints a device code and URL. Open the URL in your browse
 1. Log in to [Atlassian API token management](https://id.atlassian.com/manage-profile/security/api-tokens)
 2. Click **Create API token**
 3. Label: "todo-harvest" (or anything)
-4. Click **Create** and copy the token → `config.yaml` → `jira.api_token`
+4. Click **Create** and copy the token -> `config.yaml` -> `jira.api_token`
 5. Set `jira.email` to your Atlassian account email
 6. Set `jira.base_url` to your Jira instance URL (e.g. `https://yourname.atlassian.net`)
 
@@ -90,12 +104,12 @@ On first run, the tool prints a device code and URL. Open the URL in your browse
 4. Select your workspace
 5. Under **Capabilities**, ensure **Read content** is checked
 6. Click **Submit**
-7. Copy the **Internal Integration Secret** → `config.yaml` → `notion.token`
+7. Copy the **Internal Integration Secret** -> `config.yaml` -> `notion.token`
 8. For each database you want to harvest:
    - Open the database in Notion
-   - Click **Share** (top right) → **Invite** → select your "todo-harvest" integration
+   - Click **Share** (top right) -> **Invite** -> select your "todo-harvest" integration
    - Copy the database ID from the URL: `notion.so/{workspace}/{DATABASE_ID}?v=...`
-   - Add it to `config.yaml` → `notion.database_ids`
+   - Add it to `config.yaml` -> `notion.database_ids`
 
 ## Unified schema
 
@@ -103,8 +117,9 @@ Every task is normalized to a common format regardless of source:
 
 | Field          | Type                | Description                              |
 |----------------|---------------------|------------------------------------------|
-| `id`           | string              | `{source}-{original_id}`                 |
-| `source`       | string              | `msftodo`, `jira`, or `notion`           |
+| `id`           | string              | `{source}-{source_id}`                   |
+| `local_id`     | string              | Stable UUID assigned on first pull        |
+| `source`       | string              | `vikunja`, `msftodo`, `jira`, or `notion` |
 | `title`        | string              | Task title                               |
 | `description`  | string or null      | Task description/body                    |
 | `status`       | string              | `todo`, `in_progress`, `done`, `cancelled` |
@@ -117,13 +132,17 @@ Every task is normalized to a common format regardless of source:
 | `category`     | object              | Organizational container (see below)     |
 | `raw`          | object              | Original API payload                     |
 
-### Category mapping
+### Bidirectional field support
 
-| Source         | Category name         | Category type |
-|----------------|-----------------------|---------------|
-| Microsoft To Do| Task list name        | `list`        |
-| Jira           | Epic summary or project name | `epic` or `project` |
-| Notion         | Database title        | `database`    |
+| Field       | vikunja | jira       | msftodo | notion    |
+|-------------|---------|------------|---------|-----------|
+| title       | rw      | rw         | rw      | pull only |
+| description | rw      | rw         | rw      | pull only |
+| status      | rw      | rw         | rw      | pull only |
+| priority    | rw      | rw         | rw      | pull only |
+| due_date    | rw      | rw         | rw      | pull only |
+| tags/labels | rw      | rw         | rw      | pull only |
+| category    | rw      | pull only  | pull only | pull only |
 
 ## Troubleshooting
 
@@ -139,51 +158,37 @@ Every task is normalized to a common format regardless of source:
 
 | Error | Fix |
 |-------|-----|
-| "authentication failed" | Verify `email` and `api_token` in config.yaml. Generate a new token at [Atlassian API tokens](https://id.atlassian.com/manage-profile/security/api-tokens) |
-| "access forbidden" | Your API token may lack permissions. Ensure you have read access to the projects |
-| HTTP 400 "Bad JQL" | This is a bug — please report it |
+| "authentication failed" | Verify `email` and `api_token` in config.yaml |
+| "access forbidden" | Your API token may lack permissions |
 
 ### Notion
 
 | Error | Fix |
 |-------|-----|
-| "authentication failed" | Check your integration secret in config.yaml |
-| "access forbidden" | The integration is not shared with the database. Open the database → Share → Invite the integration |
-| Missing pages | Only pages in databases shared with the integration are returned |
+| "authentication failed" | Check your integration secret |
+| "access forbidden" | The integration is not shared with the database |
+
+### Vikunja
+
+| Error | Fix |
+|-------|-----|
+| "authentication failed" | Check your API token in config.yaml |
+| "access forbidden" | Check your token permissions |
 
 ### General
 
 | Error | Fix |
 |-------|-----|
 | "Config file not found" | Copy `config.example.yaml` to `config.yaml` |
-| Network timeout | Check your internet connection. The tool retries up to 3 times with exponential backoff |
-| Partial results | If one source fails, others still run. Check the error messages above the summary table |
+| "No command specified" | Use: `./harvest pull`, `./harvest push`, or `./harvest sync` |
+| Network timeout | The tool retries up to 3 times with exponential backoff |
 
 ## Development
 
 ```bash
-# Run tests with coverage
-./harvest --test
-
-# Run specific test file
-.venv/bin/python -m pytest tests/test_normalizer.py -v
-
-# Run with coverage report
-.venv/bin/python -m pytest --cov=src --cov-report=term-missing
-```
-
-### Project structure
-
-```
-src/
-├── sources/
-│   ├── msftodo.py       # Microsoft To Do via MS Graph API
-│   ├── jira.py          # Jira via REST API v3
-│   └── notion.py        # Notion via official API
-├── normalizer.py        # Maps each source → unified schema
-├── exporter.py          # Writes JSON and CSV files
-├── config.py            # Loads and validates config.yaml
-└── main.py              # CLI entry point
+./harvest --test                                              # run tests
+.venv/bin/python -m pytest tests/test_normalizer.py -v        # specific test
+.venv/bin/python -m pytest --cov=src --cov-report=term-missing  # coverage
 ```
 
 ## Dependencies
