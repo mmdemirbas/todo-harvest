@@ -1,0 +1,25 @@
+# todo-harvest configuration
+# Copy this file to config.yaml and fill in your credentials.
+# See README.md for detailed setup instructions for each source.
+
+output:
+  dir: ./output
+
+msftodo:
+  client_id: "YOUR_CLIENT_ID"
+  # tenant_id: use "consumers" for personal Microsoft accounts
+  tenant_id: "consumers"
+  # How to get these: see README.md § Microsoft To Do credentials
+
+jira:
+  base_url: "https://YOUR_SUBDOMAIN.atlassian.net"
+  email: "your@email.com"
+  api_token: "YOUR_API_TOKEN"
+  # How to get these: see README.md § Jira credentials
+
+notion:
+  token: "YOUR_INTEGRATION_SECRET"
+  database_ids:
+    - "DATABASE_ID_1"
+    # Add more database IDs if you have multiple Notion databases to harvest
+  # How to get these: see README.md § Notion credentials
