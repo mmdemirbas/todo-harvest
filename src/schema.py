@@ -18,7 +18,7 @@ class Category(TypedDict):
 class NormalizedItem(TypedDict):
     id: str              # "{source}-{source_id}"
     local_id: str        # stable UUID, assigned on first pull
-    source: str          # "vikunja" | "msftodo" | "jira" | "notion"
+    source: str          # "vikunja" | "mstodo" | "jira" | "notion"
     title: str
     description: str | None
     status: str          # "todo" | "in_progress" | "done" | "cancelled"

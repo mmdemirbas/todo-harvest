@@ -11,7 +11,7 @@ from src.normalizer import (
     normalize,
     normalize_jira,
     normalize_notion,
-    normalize_msftodo,
+    normalize_mstodo,
     _extract_adf_text,
     _strip_html,
     _jira_category,
@@ -37,9 +37,9 @@ class TestDispatch:
         result = normalize("notion", {"id": "p1", "properties": {}})
         assert result["source"] == "notion"
 
-    def test_dispatch_msftodo(self):
-        result = normalize("msftodo", {"id": "t1"})
-        assert result["source"] == "msftodo"
+    def test_dispatch_mstodo(self):
+        result = normalize("mstodo", {"id": "t1"})
+        assert result["source"] == "mstodo"
 
     def test_unknown_source_raises(self):
         with pytest.raises(ValueError, match="Unknown source"):
@@ -461,10 +461,10 @@ class TestNotionHelpers:
 # ---------------------------------------------------------------------------
 # Microsoft To Do normalizer
 # ---------------------------------------------------------------------------
-class TestNormalizeMsftodo:
+class TestNormalizeMstodo:
     @pytest.fixture
     def tasks(self):
-        with open(FIXTURES_DIR / "msftodo_tasks.json") as f:
+        with open(FIXTURES_DIR / "mstodo_tasks.json") as f:
             data = json.load(f)
         tasks = data["value"]
         for t in tasks:
@@ -473,90 +473,90 @@ class TestNormalizeMsftodo:
         return tasks
 
     def test_id_format(self, tasks):
-        result = normalize("msftodo", tasks[0])
-        assert result["id"] == "msftodo-task-001"
+        result = normalize("mstodo", tasks[0])
+        assert result["id"] == "mstodo-task-001"
 
     def test_title(self, tasks):
-        result = normalize("msftodo", tasks[0])
+        result = normalize("mstodo", tasks[0])
         assert result["title"] == "Buy groceries"
 
     def test_description(self, tasks):
-        result = normalize("msftodo", tasks[0])
+        result = normalize("mstodo", tasks[0])
         assert result["description"] == "Milk, eggs, bread"
 
     def test_description_empty(self, tasks):
-        result = normalize("msftodo", tasks[1])
+        result = normalize("mstodo", tasks[1])
         assert result["description"] is None
 
     def test_description_null_body(self, tasks):
-        result = normalize("msftodo", tasks[3])
+        result = normalize("mstodo", tasks[3])
         assert result["description"] is None
 
     def test_status_not_started(self, tasks):
-        result = normalize("msftodo", tasks[0])
+        result = normalize("mstodo", tasks[0])
         assert result["status"] == "todo"
 
     def test_status_in_progress(self, tasks):
-        result = normalize("msftodo", tasks[1])
+        result = normalize("mstodo", tasks[1])
         assert result["status"] == "in_progress"
 
     def test_status_completed(self, tasks):
-        result = normalize("msftodo", tasks[2])
+        result = normalize("mstodo", tasks[2])
         assert result["status"] == "done"
 
     def test_priority_high(self, tasks):
-        result = normalize("msftodo", tasks[0])
+        result = normalize("mstodo", tasks[0])
         assert result["priority"] == "high"
 
     def test_priority_normal_maps_to_medium(self, tasks):
-        result = normalize("msftodo", tasks[1])
+        result = normalize("mstodo", tasks[1])
         assert result["priority"] == "medium"
 
     def test_priority_low(self, tasks):
-        result = normalize("msftodo", tasks[2])
+        result = normalize("mstodo", tasks[2])
         assert result["priority"] == "low"
 
     def test_created_date(self, tasks):
-        result = normalize("msftodo", tasks[0])
+        result = normalize("mstodo", tasks[0])
         assert result["created_date"] == "2024-01-10T08:00:00.0000000Z"
 
     def test_updated_date(self, tasks):
-        result = normalize("msftodo", tasks[0])
+        result = normalize("mstodo", tasks[0])
         assert result["updated_date"] == "2024-01-15T10:00:00.0000000Z"
 
     def test_due_date(self, tasks):
-        result = normalize("msftodo", tasks[0])
+        result = normalize("mstodo", tasks[0])
         assert result["due_date"] == "2024-01-20T00:00:00.0000000"
 
     def test_due_date_null(self, tasks):
-        result = normalize("msftodo", tasks[1])
+        result = normalize("mstodo", tasks[1])
         assert result["due_date"] is None
 
     def test_tags_from_categories(self, tasks):
-        result = normalize("msftodo", tasks[0])
+        result = normalize("mstodo", tasks[0])
         assert "personal" in result["tags"]
         assert "shopping" in result["tags"]
 
     def test_tags_include_list_name(self, tasks):
-        result = normalize("msftodo", tasks[0])
+        result = normalize("mstodo", tasks[0])
         assert "Personal" in result["tags"]
 
     def test_tags_null_categories(self, tasks):
-        result = normalize("msftodo", tasks[3])
+        result = normalize("mstodo", tasks[3])
         # Should still have list name
         assert result["tags"] == ["Personal"]
 
     def test_tags_no_duplicate_list_name(self):
         raw = {"id": "t1", "categories": ["Personal"], "_list_id": "l1", "_list_name": "Personal"}
-        result = normalize("msftodo", raw)
+        result = normalize("mstodo", raw)
         assert result["tags"].count("Personal") == 1
 
     def test_url_always_none(self, tasks):
-        result = normalize("msftodo", tasks[0])
+        result = normalize("mstodo", tasks[0])
         assert result["url"] is None
 
     def test_category_list(self, tasks):
-        result = normalize("msftodo", tasks[0])
+        result = normalize("mstodo", tasks[0])
         assert result["category"] == {
             "id": "list-001",
             "name": "Personal",
@@ -564,15 +564,15 @@ class TestNormalizeMsftodo:
         }
 
     def test_unicode_title(self, tasks):
-        result = normalize("msftodo", tasks[2])
+        result = normalize("mstodo", tasks[2])
         assert "Ünïcödé" in result["title"]
 
     def test_raw_preserved(self, tasks):
-        result = normalize("msftodo", tasks[0])
+        result = normalize("mstodo", tasks[0])
         assert result["raw"] is tasks[0]
 
     def test_html_body_stripped(self, tasks):
-        result = normalize("msftodo", tasks[4])
+        result = normalize("mstodo", tasks[4])
         assert result["description"] == "Review notes from cancelled meeting."
         assert "<" not in result["description"]
 
@@ -581,11 +581,11 @@ class TestNormalizeMsftodo:
             "id": "t", "body": {"content": "Plain <text> content", "contentType": "text"},
             "_list_id": "l", "_list_name": "L",
         }
-        result = normalize("msftodo", raw)
+        result = normalize("mstodo", raw)
         assert result["description"] == "Plain <text> content"
 
     def test_empty_raw(self):
-        result = normalize("msftodo", {})
+        result = normalize("mstodo", {})
         assert result["title"] == ""
         assert result["status"] == "todo"
         assert result["priority"] == "none"
@@ -593,27 +593,27 @@ class TestNormalizeMsftodo:
         assert result["tags"] == []
 
 
-class TestMsftodoStatusMappingGaps:
+class TestMstodoStatusMappingGaps:
     """Cover status values in _MSFTODO_STATUS_MAP that had no fixture coverage."""
 
     def test_waiting_on_others(self):
         raw = {"id": "t", "status": "waitingOnOthers", "_list_id": "l", "_list_name": "L"}
-        result = normalize("msftodo", raw)
+        result = normalize("mstodo", raw)
         assert result["status"] == "in_progress"
 
     def test_deferred(self):
         raw = {"id": "t", "status": "deferred", "_list_id": "l", "_list_name": "L"}
-        result = normalize("msftodo", raw)
+        result = normalize("mstodo", raw)
         assert result["status"] == "todo"
 
     def test_unknown_status_defaults_to_todo(self):
         raw = {"id": "t", "status": "someNewStatus", "_list_id": "l", "_list_name": "L"}
-        result = normalize("msftodo", raw)
+        result = normalize("mstodo", raw)
         assert result["status"] == "todo"
 
     def test_unknown_importance_defaults_to_none(self):
         raw = {"id": "t", "importance": "urgent", "_list_id": "l", "_list_name": "L"}
-        result = normalize("msftodo", raw)
+        result = normalize("mstodo", raw)
         assert result["priority"] == "none"
 
 
@@ -708,11 +708,11 @@ class TestUnifiedSchema:
         "category", "raw",
     }
     CATEGORY_KEYS = {"id", "name", "type"}
-    VALID_SOURCES = {"vikunja", "jira", "notion", "msftodo"}
+    VALID_SOURCES = {"vikunja", "jira", "notion", "mstodo"}
     VALID_STATUSES = {"todo", "in_progress", "done", "cancelled"}
     VALID_PRIORITIES = {"critical", "high", "medium", "low", "none"}
 
-    @pytest.fixture(params=["vikunja", "jira", "notion", "msftodo"])
+    @pytest.fixture(params=["vikunja", "jira", "notion", "mstodo"])
     def sample(self, request):
         source = request.param
         if source == "vikunja":
@@ -727,7 +727,7 @@ class TestUnifiedSchema:
             raw["_database_id"] = "db-1"
             raw["_database_title"] = "Board"
         else:
-            with open(FIXTURES_DIR / "msftodo_tasks.json") as f:
+            with open(FIXTURES_DIR / "mstodo_tasks.json") as f:
                 raw = json.load(f)["value"][0]
             raw["_list_id"] = "l1"
             raw["_list_name"] = "List"

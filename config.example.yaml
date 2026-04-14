@@ -20,7 +20,7 @@ jira:
   api_token: "YOUR_API_TOKEN"
   # How to get these: see README.md § Jira credentials
 
-msftodo:
+mstodo:
   client_id: "YOUR_CLIENT_ID"
   # tenant_id: use "consumers" for personal Microsoft accounts
   tenant_id: "consumers"

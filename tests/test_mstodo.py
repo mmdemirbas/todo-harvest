@@ -8,7 +8,7 @@ import respx
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from src.sources.msftodo import (
+from src.sources.mstodo import (
     pull,
     _fetch_lists,
     _fetch_tasks_for_list,
@@ -16,8 +16,8 @@ from src.sources.msftodo import (
     _save_cache,
     _migrate_old_cache,
     _get_cache_path,
-    MsftodoAuthError,
-    MsftodoFetchError,
+    MstodoAuthError,
+    MstodoFetchError,
     GRAPH_BASE,
 )
 
@@ -33,28 +33,28 @@ MSFTODO_CONFIG = {
 
 @pytest.fixture
 def lists_fixture():
-    with open(FIXTURES_DIR / "msftodo_lists.json") as f:
+    with open(FIXTURES_DIR / "mstodo_lists.json") as f:
         return json.load(f)
 
 
 @pytest.fixture
 def tasks_fixture():
-    with open(FIXTURES_DIR / "msftodo_tasks.json") as f:
+    with open(FIXTURES_DIR / "mstodo_tasks.json") as f:
         return json.load(f)
 
 
 def _mock_get_token(monkeypatch):
     """Patch _get_token to return a fake token without MSAL interaction."""
     monkeypatch.setattr(
-        "src.sources.msftodo._get_token", lambda *a, **kw: "fake-access-token"
+        "src.sources.mstodo._get_token", lambda *a, **kw: "fake-access-token"
     )
 
 
 def _patch_cache_path(monkeypatch, tmp_path):
     """Redirect cache to a temp directory to avoid touching real XDG dirs."""
     cache_dir = tmp_path / ".config" / "todo-harvest"
-    monkeypatch.setattr("src.sources.msftodo._get_cache_dir", lambda: cache_dir)
-    monkeypatch.setattr("src.sources.msftodo._get_cache_path", lambda: cache_dir / "msal_cache.json")
+    monkeypatch.setattr("src.sources.mstodo._get_cache_dir", lambda: cache_dir)
+    monkeypatch.setattr("src.sources.mstodo._get_cache_path", lambda: cache_dir / "msal_cache.json")
     return cache_dir / "msal_cache.json"
 
 
@@ -66,7 +66,7 @@ class TestGetToken:
         mock_app.get_accounts.return_value = [{"username": "user@test.com"}]
         mock_app.acquire_token_silent.return_value = {"access_token": "cached-token"}
 
-        with patch("src.sources.msftodo.msal.PublicClientApplication", return_value=mock_app):
+        with patch("src.sources.mstodo.msal.PublicClientApplication", return_value=mock_app):
             token = _get_token("client-id", "consumers")
 
         assert token == "cached-token"
@@ -87,7 +87,7 @@ class TestGetToken:
             "access_token": "device-token"
         }
 
-        with patch("src.sources.msftodo.msal.PublicClientApplication", return_value=mock_app):
+        with patch("src.sources.mstodo.msal.PublicClientApplication", return_value=mock_app):
             token = _get_token("client-id", "consumers")
 
         assert token == "device-token"
@@ -106,7 +106,7 @@ class TestGetToken:
             "access_token": "new-token"
         }
 
-        with patch("src.sources.msftodo.msal.PublicClientApplication", return_value=mock_app):
+        with patch("src.sources.mstodo.msal.PublicClientApplication", return_value=mock_app):
             token = _get_token("client-id", "consumers")
 
         assert token == "new-token"
@@ -125,8 +125,8 @@ class TestGetToken:
             "error_description": "User declined",
         }
 
-        with patch("src.sources.msftodo.msal.PublicClientApplication", return_value=mock_app):
-            with pytest.raises(MsftodoAuthError, match="User declined"):
+        with patch("src.sources.mstodo.msal.PublicClientApplication", return_value=mock_app):
+            with pytest.raises(MstodoAuthError, match="User declined"):
                 _get_token("client-id", "consumers")
 
     def test_initiate_flow_failure(self, tmp_path, monkeypatch):
@@ -138,8 +138,8 @@ class TestGetToken:
             "error_description": "Application not found",
         }
 
-        with patch("src.sources.msftodo.msal.PublicClientApplication", return_value=mock_app):
-            with pytest.raises(MsftodoAuthError, match="Application not found"):
+        with patch("src.sources.mstodo.msal.PublicClientApplication", return_value=mock_app):
+            with pytest.raises(MstodoAuthError, match="Application not found"):
                 _get_token("client-id", "consumers")
 
     def test_cache_persistence(self, tmp_path, monkeypatch):
@@ -153,8 +153,8 @@ class TestGetToken:
         mock_app.get_accounts.return_value = [{"username": "u"}]
         mock_app.acquire_token_silent.return_value = {"access_token": "tok"}
 
-        with patch("src.sources.msftodo.msal.PublicClientApplication", return_value=mock_app), \
-             patch("src.sources.msftodo.msal.SerializableTokenCache", return_value=mock_cache):
+        with patch("src.sources.mstodo.msal.PublicClientApplication", return_value=mock_app), \
+             patch("src.sources.mstodo.msal.SerializableTokenCache", return_value=mock_cache):
             _get_token("client-id", "consumers")
 
         assert cache_path.exists()
@@ -336,7 +336,7 @@ class TestFetchAll:
         respx.get(LISTS_URL).mock(
             return_value=httpx.Response(401, json={"error": {"message": "Unauthorized"}})
         )
-        with pytest.raises(MsftodoAuthError, match="authentication failed"):
+        with pytest.raises(MstodoAuthError, match="authentication failed"):
             pull(MSFTODO_CONFIG)
 
     @respx.mock
@@ -381,14 +381,14 @@ class TestRetryLogic:
             httpx.Response(500, text="Error"),
             httpx.Response(500, text="Error"),
         ]
-        with pytest.raises(MsftodoFetchError):
+        with pytest.raises(MstodoFetchError):
             pull(MSFTODO_CONFIG)
 
 
 class TestPush:
     def test_push_raises_not_implemented(self):
-        from src.sources.msftodo import push
-        with pytest.raises(NotImplementedError, match="not yet implemented for msftodo"):
+        from src.sources.mstodo import push
+        with pytest.raises(NotImplementedError, match="not yet implemented for mstodo"):
             push({}, [])
 
 

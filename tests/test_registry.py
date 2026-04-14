@@ -29,6 +29,6 @@ class TestRegistryConsistency:
         with pytest.raises(NotImplementedError, match="pull-only"):
             REGISTRY["notion"].push({}, [])
 
-    def test_msftodo_push_stub_raises(self):
-        with pytest.raises(NotImplementedError, match="not yet implemented for msftodo"):
-            REGISTRY["msftodo"].push({}, [])
+    def test_mstodo_push_stub_raises(self):
+        with pytest.raises(NotImplementedError, match="not yet implemented for mstodo"):
+            REGISTRY["mstodo"].push({}, [])

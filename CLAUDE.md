@@ -20,7 +20,7 @@ src/
     _http.py       — Shared HTTP retry logic (request_with_retry)
     vikunja.py     — Vikunja REST API client (pull + push)
     jira.py        — Jira REST API v3 client (pull + push stub)
-    msftodo.py     — MS Graph API + MSAL device code auth (pull + push stub)
+    mstodo.py     — MS Graph API + MSAL device code auth (pull + push stub)
     notion.py      — Notion API v1 client (pull only)
   schema.py        — TypedDict definitions (NormalizedItem, Category, PushResult, MergeStats)
   normalizer.py    — Pure functions: raw payload → unified schema

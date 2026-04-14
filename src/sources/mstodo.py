@@ -29,11 +29,11 @@ def _get_cache_path() -> Path:
     return _get_cache_dir() / "msal_cache.json"
 
 
-class MsftodoAuthError(SourceAuthError):
+class MstodoAuthError(SourceAuthError):
     """Raised when Microsoft authentication fails."""
 
 
-class MsftodoFetchError(SourceFetchError):
+class MstodoFetchError(SourceFetchError):
     """Raised when MS Graph API returns an unexpected error."""
 
 
@@ -49,8 +49,8 @@ _AUTH_MESSAGES = {
 def _request(client: httpx.Client, method: str, url: str, **kwargs) -> httpx.Response:
     return request_with_retry(
         client, method, url,
-        auth_error_cls=MsftodoAuthError,
-        fetch_error_cls=MsftodoFetchError,
+        auth_error_cls=MstodoAuthError,
+        fetch_error_cls=MstodoFetchError,
         auth_messages=_AUTH_MESSAGES,
         **kwargs,
     )
@@ -81,7 +81,7 @@ def _get_token(client_id: str, tenant_id: str, console: Console | None = None) -
     # Fall back to device code flow
     flow = app.initiate_device_flow(scopes=SCOPES)
     if "user_code" not in flow:
-        raise MsftodoAuthError(
+        raise MstodoAuthError(
             f"Failed to initiate device code flow: {flow.get('error_description', 'unknown error')}"
         )
 
@@ -96,7 +96,7 @@ def _get_token(client_id: str, tenant_id: str, console: Console | None = None) -
     result = app.acquire_token_by_device_flow(flow)
     if "access_token" not in result:
         error = result.get("error_description", result.get("error", "unknown error"))
-        raise MsftodoAuthError(f"Microsoft authentication failed: {error}")
+        raise MstodoAuthError(f"Microsoft authentication failed: {error}")
 
     _save_cache(cache, cache_path)
     return result["access_token"]
@@ -203,4 +203,4 @@ def pull(config: dict, console: Console | None = None) -> list[dict]:
 
 def push(config: dict, tasks: list[dict], console: Console | None = None) -> dict:
     """Write normalized tasks to Microsoft To Do. Not yet implemented."""
-    raise NotImplementedError("Push not yet implemented for msftodo")
+    raise NotImplementedError("Push not yet implemented for mstodo")

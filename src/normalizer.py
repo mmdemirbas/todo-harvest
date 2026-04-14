@@ -352,7 +352,7 @@ def _notion_rich_text(props: dict, name: str) -> str | None:
 # Microsoft To Do
 # ---------------------------------------------------------------------------
 
-_MSFTODO_STATUS_MAP = {
+_MSTODO_STATUS_MAP = {
     "notstarted": "todo",
     "inprogress": "in_progress",
     "completed": "done",
@@ -360,14 +360,14 @@ _MSFTODO_STATUS_MAP = {
     "deferred": "todo",
 }
 
-_MSFTODO_IMPORTANCE_MAP = {
+_MSTODO_IMPORTANCE_MAP = {
     "high": "high",
     "normal": "medium",
     "low": "low",
 }
 
 
-def normalize_msftodo(raw: dict) -> dict:
+def normalize_mstodo(raw: dict) -> dict:
     task_id = raw.get("id", "")
 
     # Title
@@ -388,11 +388,11 @@ def normalize_msftodo(raw: dict) -> dict:
 
     # Status
     status_raw = (raw.get("status") or "").lower().replace(" ", "")
-    status = _MSFTODO_STATUS_MAP.get(status_raw, "todo")
+    status = _MSTODO_STATUS_MAP.get(status_raw, "todo")
 
     # Priority / importance
     importance_raw = (raw.get("importance") or "").lower()
-    priority = _MSFTODO_IMPORTANCE_MAP.get(importance_raw, "none")
+    priority = _MSTODO_IMPORTANCE_MAP.get(importance_raw, "none")
 
     # Dates
     created_date = raw.get("createdDateTime")
@@ -419,9 +419,9 @@ def normalize_msftodo(raw: dict) -> dict:
     }
 
     return {
-        "id": f"msftodo-{task_id}",
+        "id": f"mstodo-{task_id}",
         "local_id": "",
-        "source": "msftodo",
+        "source": "mstodo",
         "title": title,
         "description": description,
         "status": status,

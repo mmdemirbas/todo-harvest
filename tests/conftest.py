@@ -27,12 +27,12 @@ def notion_pages_fixture():
 
 
 @pytest.fixture
-def msftodo_lists_fixture():
-    with open(FIXTURES_DIR / "msftodo_lists.json") as f:
+def mstodo_lists_fixture():
+    with open(FIXTURES_DIR / "mstodo_lists.json") as f:
         return json.load(f)
 
 
 @pytest.fixture
-def msftodo_tasks_fixture():
-    with open(FIXTURES_DIR / "msftodo_tasks.json") as f:
+def mstodo_tasks_fixture():
+    with open(FIXTURES_DIR / "mstodo_tasks.json") as f:
         return json.load(f)

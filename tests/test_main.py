@@ -36,7 +36,7 @@ notion:
   database_ids:
     - "db-1"
 
-msftodo:
+mstodo:
   client_id: "test-client-id"
   tenant_id: "consumers"
 """.format(
@@ -71,7 +71,7 @@ _ITEMS_BY_SOURCE = {
     "vikunja": VIKUNJA_RAW,
     "jira": JIRA_RAW,
     "notion": [],  # simplify — empty is fine for most tests
-    "msftodo": [],
+    "mstodo": [],
 }
 
 

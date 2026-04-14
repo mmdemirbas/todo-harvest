@@ -17,7 +17,7 @@ The `harvest` script creates a virtual environment on first run and installs all
 
 ```bash
 ./todo pull                       # pull from all configured services
-./todo pull jira msftodo          # pull from specific services
+./todo pull jira mstodo          # pull from specific services
 ./todo push vikunja               # push local state to vikunja
 ./todo sync                       # pull all, then push all
 ./todo sync jira vikunja          # sync between jira and vikunja
@@ -52,7 +52,7 @@ jira:
   email: "your@email.com"
   api_token: "YOUR_API_TOKEN"
 
-msftodo:
+mstodo:
   client_id: "YOUR_CLIENT_ID"
   tenant_id: "consumers"
 
@@ -82,7 +82,7 @@ notion:
    - Check the redirect URI: `https://login.microsoftonline.com/common/oauth2/nativeclient`
    - Scroll down and enable **Allow public client flows** -> Yes
    - Click **Save**
-7. Copy the **Application (client) ID** from the Overview page -> `config.yaml` -> `msftodo.client_id`
+7. Copy the **Application (client) ID** from the Overview page -> `config.yaml` -> `mstodo.client_id`
 8. Set `tenant_id` to `"consumers"` (for personal Microsoft accounts)
 
 On first run, the tool prints a device code and URL. Open the URL in your browser, enter the code, and sign in. The token is cached locally for subsequent runs.
@@ -119,7 +119,7 @@ Every task is normalized to a common format regardless of source:
 |----------------|---------------------|------------------------------------------|
 | `id`           | string              | `{source}-{source_id}`                   |
 | `local_id`     | string              | Stable UUID assigned on first pull        |
-| `source`       | string              | `vikunja`, `msftodo`, `jira`, or `notion` |
+| `source`       | string              | `vikunja`, `mstodo`, `jira`, or `notion` |
 | `title`        | string              | Task title                               |
 | `description`  | string or null      | Task description/body                    |
 | `status`       | string              | `todo`, `in_progress`, `done`, `cancelled` |
@@ -134,7 +134,7 @@ Every task is normalized to a common format regardless of source:
 
 ### Bidirectional field support
 
-| Field       | vikunja | jira       | msftodo | notion    |
+| Field       | vikunja | jira       | mstodo | notion    |
 |-------------|---------|------------|---------|-----------|
 | title       | rw      | rw         | rw      | pull only |
 | description | rw      | rw         | rw      | pull only |

@@ -14,7 +14,7 @@ def valid_config(tmp_path):
 output:
   dir: ./output
 
-msftodo:
+mstodo:
   client_id: "test-client-id"
   tenant_id: "consumers"
 
@@ -92,9 +92,9 @@ class TestValidateSource:
         config = load_config(valid_config)
         assert validate_source(config, "notion") == []
 
-    def test_valid_msftodo(self, valid_config):
+    def test_valid_mstodo(self, valid_config):
         config = load_config(valid_config)
-        assert validate_source(config, "msftodo") == []
+        assert validate_source(config, "mstodo") == []
 
     def test_missing_section(self, valid_config):
         config = load_config(valid_config)
@@ -160,8 +160,8 @@ class TestValidateSource:
 
     def test_placeholder_database_id_rejected(self, valid_config):
         config = load_config(valid_config)
-        config["msftodo"]["client_id"] = "DATABASE_ID_1"
-        errors = validate_source(config, "msftodo")
+        config["mstodo"]["client_id"] = "DATABASE_ID_1"
+        errors = validate_source(config, "mstodo")
         assert any("placeholder" in e for e in errors)
 
     def test_placeholder_case_insensitive(self, valid_config):
@@ -200,7 +200,7 @@ class TestEnabledSources:
     def test_all_valid(self, valid_config):
         config = load_config(valid_config)
         # Order follows REGISTRY key order; vikunja not in config so skipped
-        assert enabled_sources(config) == ["jira", "msftodo", "notion"]
+        assert enabled_sources(config) == ["jira", "mstodo", "notion"]
 
     def test_partial(self, partial_config):
         config = load_config(partial_config)
@@ -216,7 +216,7 @@ jira:
   base_url: "https://test.atlassian.net"
   email: "test@example.com"
   api_token: "test-token"
-msftodo:
+mstodo:
   client_id: "test-client-id"
   tenant_id: "consumers"
 notion:

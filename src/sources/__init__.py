@@ -81,10 +81,10 @@ REGISTRY: dict[str, SourceDef] = {
         required_keys=["base_url", "email", "api_token"],
         push_supported=False,  # stub only
     ),
-    "msftodo": SourceDef(
-        module_path="src.sources.msftodo",
+    "mstodo": SourceDef(
+        module_path="src.sources.mstodo",
         normalize_module="src.normalizer",
-        normalize_fn="normalize_msftodo",
+        normalize_fn="normalize_mstodo",
         required_keys=["client_id", "tenant_id"],
         push_supported=False,  # stub only
     ),
