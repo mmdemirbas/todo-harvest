@@ -18,6 +18,7 @@ JIRA_FIELDS = [
     "summary", "description", "status", "priority", "issuetype",
     "project", "created", "updated", "duedate", "labels",
     "parent", "customfield_10014",
+    "comment", "assignee", "resolution",
 ]
 
 

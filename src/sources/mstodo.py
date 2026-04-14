@@ -16,7 +16,7 @@ from src.sources._http import (
 )
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
-SCOPES = ["Tasks.Read"]
+SCOPES = ["Tasks.Read", "Tasks.Read.Shared"]
 _OLD_CACHE_FILENAME = ".todo_harvest_msal_cache.json"
 
 
@@ -147,9 +147,15 @@ def _fetch_lists(client: httpx.Client) -> list[dict]:
 
 
 def _fetch_tasks_for_list(client: httpx.Client, list_id: str) -> list[dict]:
-    """Fetch all tasks (including completed) from a single list."""
+    """Fetch all tasks (including completed) from a single list.
+
+    Expands checklistItems (steps) inline to avoid per-task API calls.
+    """
     tasks: list[dict] = []
-    url: str | None = f"{GRAPH_BASE}/me/todo/lists/{list_id}/tasks"
+    url: str | None = (
+        f"{GRAPH_BASE}/me/todo/lists/{list_id}/tasks"
+        "?$expand=checklistItems"
+    )
 
     while url:
         resp = _request(client, "GET", url)
