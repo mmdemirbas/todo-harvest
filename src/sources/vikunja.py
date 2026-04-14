@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import httpx
 from rich.console import Console
+
+if TYPE_CHECKING:
+    from src.mapping import SyncMapping
 
 from src.sources._http import (
     SourceAuthError, SourceFetchError,
@@ -83,13 +88,22 @@ def pull(config: dict, console: Console | None = None) -> list[dict]:
     return all_tasks
 
 
-def push(config: dict, tasks: list[dict], console: Console | None = None) -> dict:
+def push(
+    config: dict,
+    tasks: list[dict],
+    console: Console | None = None,
+    mapping: "SyncMapping | None" = None,
+) -> dict:
     """Write normalized tasks to Vikunja.
 
-    Creates new tasks or updates existing ones based on mapping.
+    For each task:
+      - If mapping.db has a Vikunja source_id for the local_id → UPDATE
+      - Else → CREATE in config['default_project_id'] (or skip with reason)
+
     Returns a PushResult dict with counts.
     """
     base_url = config["base_url"].rstrip("/")
+    default_project_id = config.get("default_project_id")
     headers = {
         "Authorization": f"Bearer {config['api_token']}",
         "Content-Type": "application/json",
@@ -98,31 +112,73 @@ def push(config: dict, tasks: list[dict], console: Console | None = None) -> dic
 
     created = 0
     updated = 0
-    skipped = 0
+    skipped_no_project = 0
+    skipped_no_local_id = 0
+    errors = 0
 
     with httpx.Client(timeout=DEFAULT_TIMEOUT, headers=headers) as client:
         for task in tasks:
-            source_id = task.get("_vikunja_id")
-            if source_id:
-                # Update existing task
-                payload = _to_vikunja_payload(task)
-                _request(client, "POST", f"{base_url}/api/v1/tasks/{source_id}", json=payload)
-                updated += 1
-            else:
-                # Create new task — needs a project_id
-                project_id = task.get("_vikunja_project_id")
-                if not project_id:
-                    skipped += 1
-                    continue
-                payload = _to_vikunja_payload(task)
-                _request(
-                    client, "PUT", f"{base_url}/api/v1/projects/{project_id}/tasks",
-                    json=payload,
-                )
-                created += 1
+            local_id = task.get("local_id")
+            if not local_id:
+                skipped_no_local_id += 1
+                continue
+
+            # Look up existing Vikunja mapping
+            vikunja_id = None
+            if mapping is not None:
+                vikunja_id = mapping.get_source_id(local_id, "vikunja")
+
+            payload = _to_vikunja_payload(task)
+
+            try:
+                if vikunja_id:
+                    # Update existing Vikunja task
+                    _request(
+                        client, "POST", f"{base_url}/api/v1/tasks/{vikunja_id}",
+                        json=payload,
+                    )
+                    updated += 1
+                else:
+                    # Create new Vikunja task
+                    if not default_project_id:
+                        skipped_no_project += 1
+                        continue
+                    resp = _request(
+                        client, "PUT",
+                        f"{base_url}/api/v1/projects/{default_project_id}/tasks",
+                        json=payload,
+                    )
+                    new_task = resp.json()
+                    new_id = str(new_task.get("id", ""))
+                    if mapping is not None and new_id:
+                        mapping.upsert(local_id, "vikunja", new_id)
+                    created += 1
+            except (VikunjaAuthError, VikunjaFetchError) as exc:
+                errors += 1
+                if console:
+                    console.print(
+                        f"[red]  Vikunja:[/] failed on '{task.get('title', '')[:40]}': {exc}"
+                    )
+
+    skipped = skipped_no_project + skipped_no_local_id
 
     if console:
-        console.print(f"  Vikunja: {created} created, {updated} updated, {skipped} skipped.")
+        console.print(
+            f"  Vikunja: {created} created, {updated} updated, "
+            f"{skipped} skipped, {errors} errors."
+        )
+        if skipped_no_project > 0:
+            console.print(
+                f"  [yellow]{skipped_no_project} tasks skipped:[/] no Vikunja mapping found "
+                f"and no 'vikunja.default_project_id' set in config.yaml.\n"
+                f"  [dim]Add 'default_project_id: <id>' under vikunja: in config.yaml "
+                f"to create new tasks in that project.[/]"
+            )
+        if skipped_no_local_id > 0:
+            console.print(
+                f"  [yellow]{skipped_no_local_id} tasks skipped:[/] missing local_id "
+                f"(run pull first to assign local_ids)."
+            )
 
     return {"created": created, "updated": updated, "skipped": skipped}
 

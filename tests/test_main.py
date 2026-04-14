@@ -229,7 +229,7 @@ class TestPush:
         from src.sources.vikunja import VikunjaAuthError
         main(["--config", str(config_file), "pull", "vikunja"])
         orig = REGISTRY["vikunja"].push
-        REGISTRY["vikunja"].push = lambda c, t, con=None: (_ for _ in ()).throw(
+        REGISTRY["vikunja"].push = lambda c, t, con=None, **kw: (_ for _ in ()).throw(
             VikunjaAuthError("bad token"))
         try:
             result = main(["--config", str(config_file), "push", "vikunja"])
@@ -241,7 +241,7 @@ class TestPush:
         from src.sources import REGISTRY
         main(["--config", str(config_file), "pull", "vikunja"])
         orig = REGISTRY["vikunja"].push
-        REGISTRY["vikunja"].push = lambda c, t, con=None: (_ for _ in ()).throw(
+        REGISTRY["vikunja"].push = lambda c, t, con=None, **kw: (_ for _ in ()).throw(
             RuntimeError("unexpected"))
         try:
             result = main(["--config", str(config_file), "push", "vikunja"])
@@ -254,7 +254,7 @@ class TestPush:
         from src.sources import REGISTRY
         main(["--config", str(config_file), "pull", "vikunja"])
         orig = REGISTRY["vikunja"].push
-        REGISTRY["vikunja"].push = lambda c, t, con=None: {"created": 1, "updated": 0, "skipped": 0}
+        REGISTRY["vikunja"].push = lambda c, t, con=None, **kw: {"created": 1, "updated": 0, "skipped": 0}
         try:
             result = main(["--config", str(config_file), "push", "vikunja"])
         finally:

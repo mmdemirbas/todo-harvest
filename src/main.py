@@ -192,7 +192,7 @@ def _cmd_push(config: dict, services: list[str]) -> int:
                 continue
 
             try:
-                result = source_def.push(config[service], local_items, console)
+                result = source_def.push(config[service], local_items, console, mapping=mapping)
                 mapping.log_sync(service, "push", result.get("created", 0) + result.get("updated", 0))
                 all_results.append({"service": service, **result})
             except NotImplementedError as exc:

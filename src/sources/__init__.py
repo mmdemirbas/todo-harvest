@@ -55,9 +55,19 @@ class SourceDef:
         mod = self._load()
         return mod.pull(config, console)
 
-    def push(self, config: dict, tasks: list[dict], console: Any = None) -> dict:
+    def push(
+        self,
+        config: dict,
+        tasks: list[dict],
+        console: Any = None,
+        mapping: Any = None,
+    ) -> dict:
         mod = self._load()
-        return mod.push(config, tasks, console)
+        try:
+            return mod.push(config, tasks, console, mapping=mapping)
+        except TypeError:
+            # Backwards-compat: source's push() doesn't accept mapping
+            return mod.push(config, tasks, console)
 
     def normalize(self, raw: dict, source_config: dict | None = None) -> NormalizedItem:
         mod = self._load_normalizer()

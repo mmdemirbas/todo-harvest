@@ -171,68 +171,109 @@ class TestPull:
 
 
 class TestPush:
+    def _config(self, default_project_id=None):
+        cfg = dict(VIKUNJA_CONFIG)
+        if default_project_id is not None:
+            cfg["default_project_id"] = default_project_id
+        return cfg
+
     @respx.mock
-    def test_create_task(self):
+    def test_create_task_via_default_project(self, tmp_path):
+        from src.mapping import SyncMapping
         task = {
+            "local_id": "abc-123",
             "title": "New Task", "description": "Desc", "status": "todo",
             "priority": "high", "due_date": None, "tags": [],
-            "_vikunja_id": None, "_vikunja_project_id": 1,
         }
         route = respx.put(f"{BASE_URL}/api/v1/projects/1/tasks")
         route.mock(return_value=httpx.Response(200, json={"id": 99}))
 
-        result = push(VIKUNJA_CONFIG, [task])
+        with SyncMapping(tmp_path / "m.db") as mapping:
+            result = push(self._config(default_project_id=1), [task], mapping=mapping)
+
         assert result["created"] == 1
         assert result["updated"] == 0
         assert route.call_count == 1
 
     @respx.mock
-    def test_update_task(self):
+    def test_create_records_new_mapping(self, tmp_path):
+        from src.mapping import SyncMapping
+        task = {"local_id": "abc-123", "title": "New Task"}
+        respx.put(f"{BASE_URL}/api/v1/projects/1/tasks").mock(
+            return_value=httpx.Response(200, json={"id": 99})
+        )
+        with SyncMapping(tmp_path / "m.db") as mapping:
+            push(self._config(default_project_id=1), [task], mapping=mapping)
+            assert mapping.get_source_id("abc-123", "vikunja") == "99"
+
+    @respx.mock
+    def test_update_task_from_mapping(self, tmp_path):
+        from src.mapping import SyncMapping
         task = {
+            "local_id": "abc-123",
             "title": "Updated Task", "status": "done", "priority": "none",
-            "due_date": None, "tags": ["test"], "_vikunja_id": 42,
+            "due_date": None, "tags": ["test"],
         }
         route = respx.post(f"{BASE_URL}/api/v1/tasks/42")
         route.mock(return_value=httpx.Response(200, json={"id": 42}))
 
-        result = push(VIKUNJA_CONFIG, [task])
+        with SyncMapping(tmp_path / "m.db") as mapping:
+            mapping.upsert("abc-123", "vikunja", "42")
+            result = push(VIKUNJA_CONFIG, [task], mapping=mapping)
+
         assert result["updated"] == 1
         assert result["created"] == 0
 
     @respx.mock
-    def test_skip_task_without_project(self):
-        task = {
-            "title": "Orphan", "status": "todo", "priority": "none",
-            "_vikunja_id": None, "_vikunja_project_id": None,
-        }
-        result = push(VIKUNJA_CONFIG, [task])
+    def test_skip_without_default_project(self, tmp_path):
+        from src.mapping import SyncMapping
+        task = {"local_id": "abc-123", "title": "Orphan"}
+        with SyncMapping(tmp_path / "m.db") as mapping:
+            result = push(VIKUNJA_CONFIG, [task], mapping=mapping)
+        assert result["skipped"] == 1
+        assert result["created"] == 0
+
+    @respx.mock
+    def test_skip_without_local_id(self):
+        task = {"title": "No Local ID"}
+        result = push(self._config(default_project_id=1), [task])
         assert result["skipped"] == 1
 
     @respx.mock
-    def test_auth_error_on_push(self):
-        task = {"title": "T", "_vikunja_id": 1}
-        respx.post(f"{BASE_URL}/api/v1/tasks/1").mock(
-            return_value=httpx.Response(401, json={"message": "Unauthorized"})
-        )
-        with pytest.raises(VikunjaAuthError):
-            push(VIKUNJA_CONFIG, [task])
-
-    @respx.mock
-    def test_fetch_error_on_push(self):
-        task = {"title": "T", "_vikunja_id": 42}
-        respx.post(f"{BASE_URL}/api/v1/tasks/42").mock(
-            return_value=httpx.Response(500, text="Internal Server Error")
-        )
-        with pytest.raises(VikunjaFetchError, match="500"):
-            push(VIKUNJA_CONFIG, [task])
-
-    @respx.mock
-    def test_push_with_console_does_not_crash(self):
-        from rich.console import Console
-        task = {"title": "T", "_vikunja_id": None, "_vikunja_project_id": 1}
+    def test_error_reported_but_does_not_abort(self, tmp_path):
+        from src.mapping import SyncMapping
+        task1 = {"local_id": "a", "title": "T1"}
+        task2 = {"local_id": "b", "title": "T2"}
         respx.put(f"{BASE_URL}/api/v1/projects/1/tasks").mock(
-            return_value=httpx.Response(200, json={"id": 10}))
-        result = push(VIKUNJA_CONFIG, [task], console=Console(quiet=True))
+            side_effect=[
+                httpx.Response(500, text="boom"),
+                httpx.Response(500, text="boom"),
+                httpx.Response(500, text="boom"),  # retries exhausted
+                httpx.Response(200, json={"id": 11}),
+            ]
+        )
+        with SyncMapping(tmp_path / "m.db") as mapping:
+            result = push(
+                self._config(default_project_id=1),
+                [task1, task2],
+                mapping=mapping,
+            )
+        # First task fails, second succeeds
+        assert result["created"] == 1
+
+    @respx.mock
+    def test_push_with_console_does_not_crash(self, tmp_path):
+        from rich.console import Console
+        from src.mapping import SyncMapping
+        task = {"local_id": "abc", "title": "T"}
+        respx.put(f"{BASE_URL}/api/v1/projects/1/tasks").mock(
+            return_value=httpx.Response(200, json={"id": 10})
+        )
+        with SyncMapping(tmp_path / "m.db") as mapping:
+            result = push(
+                self._config(default_project_id=1), [task],
+                console=Console(quiet=True), mapping=mapping,
+            )
         assert result["created"] == 1
 
 
