@@ -11,13 +11,13 @@ cp config.example.yaml config.yaml
 ./todo pull
 ```
 
-The `harvest` script creates a virtual environment on first run and installs all dependencies automatically.
+The `todo` script creates a virtual environment on first run and installs all dependencies automatically.
 
 ### Usage
 
 ```bash
 ./todo pull                       # pull from all configured services
-./todo pull jira mstodo          # pull from specific services
+./todo pull jira mstodo           # pull from specific services
 ./todo push vikunja               # push local state to vikunja
 ./todo sync                       # pull all, then push all
 ./todo sync jira vikunja          # sync between jira and vikunja
@@ -51,6 +51,11 @@ jira:
   base_url: "https://YOUR_SUBDOMAIN.atlassian.net"
   email: "your@email.com"
   api_token: "YOUR_API_TOKEN"
+  # jql: "assignee = currentUser() ORDER BY created DESC"
+  # status_map:
+  #   "Custom Status": "in_progress"
+  # priority_map:
+  #   "Custom Priority": "high"
 
 mstodo:
   client_id: "YOUR_CLIENT_ID"
@@ -60,7 +65,26 @@ notion:
   token: "YOUR_INTEGRATION_SECRET"
   database_ids:
     - "DATABASE_ID_1"
+  # field_map:
+  #   status: "Status"
+  #   priority: "Priority"
+  #   due_date: "Due Date"
+  #   tags: "Tags"
+  #   category: "Epic"
+  #   description: "Notes"
+  # status_map:
+  #   "Custom Status": "in_progress"
+  # priority_map:
+  #   "Custom Priority": "high"
 ```
+
+### Custom mappings
+
+Jira and Notion support config-driven mappings for status names, priority names, and (Notion only) column names. This is useful when your instance uses non-English or custom values.
+
+**Jira:** `status_map` overrides the built-in status-category mapping. `priority_map` overrides priority name matching. `jql` customizes the search query (must be bounded — the default is `assignee = currentUser() ORDER BY created DESC`).
+
+**Notion:** `field_map` maps your database column names to unified fields (`status`, `priority`, `due_date`, `tags`, `category`, `description`). Both `select` and `status` property types are supported. `status_map` and `priority_map` override the built-in value matching.
 
 ## Vikunja credentials
 
@@ -72,16 +96,14 @@ notion:
 
 ## Microsoft To Do credentials
 
+Requires an Azure AD / Entra ID tenant. If you don't have one, join the [M365 Developer Program](https://developer.microsoft.com/en-us/microsoft-365/dev-program) (free) or sign up for [Azure](https://azure.microsoft.com/free/).
+
 1. Go to [Azure Portal - App registrations](https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
 2. Click **New registration**
 3. Name: anything (e.g. "todo-harvest")
 4. Supported account types: **Personal Microsoft accounts only**
 5. Click **Register**
-6. Under **Authentication** in the left sidebar:
-   - Click **Add a platform** -> **Mobile and desktop applications**
-   - Check the redirect URI: `https://login.microsoftonline.com/common/oauth2/nativeclient`
-   - Scroll down and enable **Allow public client flows** -> Yes
-   - Click **Save**
+6. In the app's **Manifest** (left sidebar), set `"allowPublicClient": true` and save
 7. Copy the **Application (client) ID** from the Overview page -> `config.yaml` -> `mstodo.client_id`
 8. Set `tenant_id` to `"consumers"` (for personal Microsoft accounts)
 
@@ -130,7 +152,16 @@ Every task is normalized to a common format regardless of source:
 | `tags`         | list of strings     | Labels, categories, list names           |
 | `url`          | string or null      | Link back to the original item           |
 | `category`     | object              | Organizational container (see below)     |
-| `raw`          | object              | Original API payload                     |
+| `raw`          | object              | Original API payload (all source fields) |
+
+### Source-specific data in `raw`
+
+The `raw` field preserves the complete API response for each task, including source-specific fields:
+
+- **MS To Do:** `body` (notes), `checklistItems` (steps), `reminderDateTime`, `isReminderOn`, `completedDateTime`
+- **Jira:** `description` (ADF), `comment`, `assignee`, `resolution`, `customfield_*`
+- **Notion:** all database properties in their native types
+- **Vikunja:** `description`, `labels`, `attachments`, `reminders`
 
 ### Bidirectional field support
 
@@ -150,7 +181,8 @@ Every task is normalized to a common format regardless of source:
 
 | Error | Fix |
 |-------|-----|
-| "Failed to initiate device code flow" | Check that `client_id` is correct and the app registration has public client flows enabled |
+| "Failed to initiate device code flow" | Check that `client_id` is correct and `allowPublicClient` is `true` in the app manifest |
+| "The client application must be marked as mobile" | Set `"allowPublicClient": true` in the app registration's Manifest |
 | "Microsoft authentication failed" | Re-run the tool to get a new device code. Make sure you sign in within the time limit |
 | "access forbidden" | Ensure your app registration has the `Tasks.Read` delegated permission |
 
@@ -160,6 +192,7 @@ Every task is normalized to a common format regardless of source:
 |-------|-----|
 | "authentication failed" | Verify `email` and `api_token` in config.yaml |
 | "access forbidden" | Your API token may lack permissions |
+| "Unbounded JQL queries" | Set `jql` in config.yaml (default: `assignee = currentUser()`) |
 
 ### Notion
 

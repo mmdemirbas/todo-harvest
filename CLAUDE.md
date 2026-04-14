@@ -39,7 +39,7 @@ src/
 
 ### Data flow
 
-**Pull:** service API → source `pull()` → raw dicts → `normalize()` → `merge_pulled_items()` → `save_local_state()` → todos.json
+**Pull:** service API → source `pull()` → raw dicts → `normalize(source, raw, source_config)` → `merge_pulled_items()` → `save_local_state()` → todos.json
 
 **Push:** todos.json → `load_local_state()` → source `push()` → service API
 
@@ -101,9 +101,27 @@ On pull, field-by-field comparison using timestamps:
 - 3 retries with exponential backoff on 429/5xx/network errors
 - 30-second timeout per request
 
+### Config-driven mappings
+
+Normalizers accept an optional `source_config` dict from config.yaml. Supported keys:
+
+- **Jira:** `jql` (search query), `status_map`, `priority_map`
+- **Notion:** `field_map` (column name → unified field), `status_map`, `priority_map`
+- **Vikunja/MS To Do:** `source_config` accepted but not currently used (hardcoded maps suffice)
+
+Config maps override built-in maps; unmapped values fall through to built-in logic.
+
+### API versions
+
+- **Jira:** `POST /rest/api/3/search/jql` (cursor-based pagination)
+- **Vikunja:** `GET /api/v1/tasks` (offset pagination)
+- **MS To Do:** MS Graph v1.0, `$expand=checklistItems`
+- **Notion:** API version `2022-06-28`
+
 ## Known limitations (deferred by design)
 
 - Package named `src/` (not `todo_harvest/`) — no PyPI publishing planned
 - No parallel database/list fetching (sequential, network-bound)
 - Push not yet implemented for Jira and MS To Do (stubs raise NotImplementedError)
 - Notion is pull-only by design
+- Notion page content (blocks) not fetched — only database properties (would require N API calls for N pages)
