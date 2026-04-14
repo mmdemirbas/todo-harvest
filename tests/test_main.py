@@ -185,16 +185,80 @@ class TestPull:
         assert len(jira_items) == 1
 
 
+    def test_pull_misconfigured_service_returns_1(self, tmp_path):
+        """Service in config but with invalid credentials → skip + exit 1."""
+        cfg = tmp_path / "config.yaml"
+        cfg.write_text("""
+output:
+  dir: "{out}"
+mapping:
+  db_path: "{db}"
+jira:
+  base_url: "https://test.atlassian.net"
+  email: ""
+  api_token: "valid-token"
+""".format(out=str(tmp_path / "output"), db=str(tmp_path / "test.db")))
+        result = main(["--config", str(cfg), "pull", "jira"])
+        assert result == 1
+
+    def test_pull_unexpected_exception_returns_1(self, config_file, mock_sources, tmp_path):
+        """RuntimeError (not SourceAuthError) still returns 1 with traceback."""
+        from src.sources import REGISTRY
+        orig = REGISTRY["jira"].pull
+        REGISTRY["jira"].pull = lambda c, con=None: (_ for _ in ()).throw(RuntimeError("bug"))
+        try:
+            result = main(["--config", str(config_file), "pull", "jira"])
+        finally:
+            REGISTRY["jira"].pull = orig
+        assert result == 1
+
+
 class TestPush:
     def test_push_no_local_tasks(self, config_file, tmp_path):
         result = main(["--config", str(config_file), "push", "vikunja"])
         assert result == 0  # no error, just nothing to push
 
     def test_push_unsupported_source_skipped(self, config_file, mock_sources, tmp_path):
-        # Pull first to create local state
         main(["--config", str(config_file), "pull", "jira"])
-        # Push to notion (pull-only) — should skip gracefully
         result = main(["--config", str(config_file), "push", "notion"])
+        assert result == 0
+
+    def test_push_auth_error_returns_1(self, config_file, mock_sources, tmp_path):
+        """SourceAuthError during push → exit 1."""
+        from src.sources import REGISTRY
+        from src.sources.vikunja import VikunjaAuthError
+        main(["--config", str(config_file), "pull", "vikunja"])
+        orig = REGISTRY["vikunja"].push
+        REGISTRY["vikunja"].push = lambda c, t, con=None: (_ for _ in ()).throw(
+            VikunjaAuthError("bad token"))
+        try:
+            result = main(["--config", str(config_file), "push", "vikunja"])
+        finally:
+            REGISTRY["vikunja"].push = orig
+        assert result == 1
+
+    def test_push_unexpected_error_returns_1(self, config_file, mock_sources, tmp_path):
+        from src.sources import REGISTRY
+        main(["--config", str(config_file), "pull", "vikunja"])
+        orig = REGISTRY["vikunja"].push
+        REGISTRY["vikunja"].push = lambda c, t, con=None: (_ for _ in ()).throw(
+            RuntimeError("unexpected"))
+        try:
+            result = main(["--config", str(config_file), "push", "vikunja"])
+        finally:
+            REGISTRY["vikunja"].push = orig
+        assert result == 1
+
+    def test_push_successful_returns_0(self, config_file, mock_sources, tmp_path):
+        """Successful push returns 0 and prints summary table."""
+        from src.sources import REGISTRY
+        main(["--config", str(config_file), "pull", "vikunja"])
+        orig = REGISTRY["vikunja"].push
+        REGISTRY["vikunja"].push = lambda c, t, con=None: {"created": 1, "updated": 0, "skipped": 0}
+        try:
+            result = main(["--config", str(config_file), "push", "vikunja"])
+        finally:
+            REGISTRY["vikunja"].push = orig
         assert result == 0
 
 
@@ -204,6 +268,16 @@ class TestSync:
         assert result == 0
         state_path = tmp_path / "output" / "todos.json"
         assert state_path.exists()
+
+    def test_sync_returns_1_when_pull_fails(self, config_file, mock_sources, tmp_path):
+        from src.sources import REGISTRY
+        orig = REGISTRY["jira"].pull
+        REGISTRY["jira"].pull = lambda c, con=None: (_ for _ in ()).throw(SourceFetchError("down"))
+        try:
+            result = main(["--config", str(config_file), "sync", "jira"])
+        finally:
+            REGISTRY["jira"].pull = orig
+        assert result == 1
 
 
 class TestExport:
