@@ -209,6 +209,15 @@ notion:
             result = main(["--config", str(config_file), "--source", "jira"])
         assert result == 0
 
+    def test_export_filesystem_error_returns_1(self, config_file, mock_sources, tmp_path):
+        """Disk full / permission denied on export produces error, not traceback."""
+        result = main([
+            "--config", str(config_file),
+            "--source", "jira",
+            "--output-dir", "/nonexistent/readonly/path",
+        ])
+        assert result == 1
+
     def test_output_files_content(self, config_file, mock_sources, tmp_path):
         main(["--config", str(config_file), "--source", "jira"])
         output_dir = tmp_path / "output"

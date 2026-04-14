@@ -69,12 +69,24 @@ def validate_source(config: dict, source: str) -> list[str]:
         errors.append(f"Section '{source}' must be a mapping, got {type(section).__name__}")
         return errors
 
+    list_keys = {"database_ids"}
+
     for key in REQUIRED_KEYS.get(source, []):
         val = section.get(key)
-        if val is None or (isinstance(val, str) and not val.strip()):
-            errors.append(f"'{source}.{key}' is missing or empty in config.yaml")
-        elif isinstance(val, list) and len(val) == 0:
-            errors.append(f"'{source}.{key}' is an empty list in config.yaml")
+        if val is None:
+            errors.append(f"'{source}.{key}' is missing in config.yaml")
+        elif key in list_keys:
+            if not isinstance(val, list):
+                errors.append(f"'{source}.{key}' must be a list in config.yaml")
+            elif len(val) == 0:
+                errors.append(f"'{source}.{key}' is an empty list in config.yaml")
+        else:
+            if not isinstance(val, str):
+                errors.append(
+                    f"'{source}.{key}' must be a string (use quotes around the value)"
+                )
+            elif not val.strip():
+                errors.append(f"'{source}.{key}' is empty in config.yaml")
 
     return errors
 

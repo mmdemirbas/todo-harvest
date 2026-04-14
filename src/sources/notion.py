@@ -92,7 +92,11 @@ def _fetch_database_pages(
 
         if not data.get("has_more", False):
             break
-        start_cursor = data.get("next_cursor")
+        next_cursor = data.get("next_cursor")
+        if not next_cursor:
+            # API says has_more but gave no cursor — break to avoid infinite loop
+            break
+        start_cursor = next_cursor
 
     return pages
 

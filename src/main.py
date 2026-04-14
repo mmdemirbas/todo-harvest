@@ -115,7 +115,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     # Export
-    files = export_all(all_items, output_dir)
+    try:
+        files = export_all(all_items, output_dir)
+    except OSError as exc:
+        console.print(f"[bold red]Failed to write output:[/] {exc}")
+        return 1
 
     # Summary table
     from rich.table import Table

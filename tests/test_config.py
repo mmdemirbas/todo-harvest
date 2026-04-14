@@ -127,6 +127,31 @@ class TestValidateSource:
         errors = validate_source(config, "jira")
         assert any("must be a mapping" in e for e in errors)
 
+    def test_integer_value_rejected(self, valid_config):
+        """YAML parses unquoted numbers as int — must produce clear error."""
+        config = load_config(valid_config)
+        config["jira"]["api_token"] = 12345
+        errors = validate_source(config, "jira")
+        assert any("must be a string" in e for e in errors)
+
+    def test_boolean_value_rejected(self, valid_config):
+        config = load_config(valid_config)
+        config["jira"]["base_url"] = True
+        errors = validate_source(config, "jira")
+        assert any("must be a string" in e for e in errors)
+
+    def test_database_ids_wrong_type_rejected(self, valid_config):
+        config = load_config(valid_config)
+        config["notion"]["database_ids"] = "not-a-list"
+        errors = validate_source(config, "notion")
+        assert any("must be a list" in e for e in errors)
+
+    def test_none_value_rejected(self, valid_config):
+        config = load_config(valid_config)
+        config["jira"]["email"] = None
+        errors = validate_source(config, "jira")
+        assert any("missing" in e for e in errors)
+
 
 class TestEnabledSources:
     def test_all_valid(self, valid_config):

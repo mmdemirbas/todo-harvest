@@ -89,6 +89,24 @@ class TestFetchDatabasePages:
         assert route.call_count == 2
 
 
+    @respx.mock
+    def test_has_more_true_but_no_cursor_terminates(self, pages_fixture):
+        """Guard against infinite loop when API returns has_more=True but no cursor."""
+        broken_response = {
+            "results": pages_fixture["results"][:2],
+            "has_more": True,
+            "next_cursor": None,
+        }
+        route = respx.post(f"{API_BASE}/databases/db-abc-123/query")
+        route.mock(return_value=httpx.Response(200, json=broken_response))
+
+        with httpx.Client(headers={"Authorization": "Bearer test"}) as client:
+            pages = _fetch_database_pages(client, "db-abc-123")
+
+        assert len(pages) == 2
+        assert route.call_count == 1  # Must not loop
+
+
 class TestFetchAll:
     @respx.mock
     def test_fetches_from_single_database(self, db_fixture, pages_fixture):
