@@ -4,20 +4,20 @@ from __future__ import annotations
 
 import os
 import tempfile
-import time
 from pathlib import Path
 
 import httpx
 import msal
 from rich.console import Console
 
+from src.sources._http import (
+    SourceAuthError, SourceFetchError,
+    request_with_retry, DEFAULT_TIMEOUT,
+)
+
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 SCOPES = ["Tasks.Read"]
 _OLD_CACHE_FILENAME = ".todo_harvest_msal_cache.json"
-DEFAULT_TIMEOUT = 30.0
-MAX_RETRIES = 3
-RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
-BACKOFF_BASE = 1.0
 
 
 def _get_cache_dir() -> Path:
@@ -29,12 +29,31 @@ def _get_cache_path() -> Path:
     return _get_cache_dir() / "msal_cache.json"
 
 
-class MsftodoAuthError(Exception):
+class MsftodoAuthError(SourceAuthError):
     """Raised when Microsoft authentication fails."""
 
 
-class MsftodoFetchError(Exception):
+class MsftodoFetchError(SourceFetchError):
     """Raised when MS Graph API returns an unexpected error."""
+
+
+_AUTH_MESSAGES = {
+    401: (
+        "Microsoft Graph authentication failed. Your token may have expired.\n"
+        "Re-run to trigger a new device code login."
+    ),
+    403: "Microsoft Graph access forbidden. Check your app permissions (Tasks.Read scope).",
+}
+
+
+def _request(client: httpx.Client, method: str, url: str, **kwargs) -> httpx.Response:
+    return request_with_retry(
+        client, method, url,
+        auth_error_cls=MsftodoAuthError,
+        fetch_error_cls=MsftodoFetchError,
+        auth_messages=_AUTH_MESSAGES,
+        **kwargs,
+    )
 
 
 def _get_token(client_id: str, tenant_id: str, console: Console | None = None) -> str:
@@ -67,10 +86,10 @@ def _get_token(client_id: str, tenant_id: str, console: Console | None = None) -
         )
 
     if console:
-        console.print(f"\n[bold]Microsoft login required.[/]")
+        console.print("\n[bold]Microsoft login required.[/]")
         console.print(f"  Open: {flow['verification_uri']}")
         console.print(f"  Enter code: [bold cyan]{flow['user_code']}[/]")
-        console.print(f"  Waiting for authentication...\n")
+        console.print("  Waiting for authentication...\n")
     else:
         print(f"Open {flow['verification_uri']} and enter code: {flow['user_code']}")
 
@@ -113,48 +132,13 @@ def _save_cache(cache: msal.SerializableTokenCache, cache_path: Path) -> None:
         raise
 
 
-def _request_with_retry(
-    client: httpx.Client, method: str, url: str, **kwargs
-) -> httpx.Response:
-    last_exc = None
-    for attempt in range(MAX_RETRIES):
-        try:
-            resp = client.request(method, url, **kwargs)
-        except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout) as exc:
-            last_exc = exc
-            time.sleep(BACKOFF_BASE * (2 ** attempt))
-            continue
-
-        if resp.status_code == 401:
-            raise MsftodoAuthError(
-                "Microsoft Graph authentication failed. Your token may have expired.\n"
-                "Re-run to trigger a new device code login."
-            )
-        if resp.status_code == 403:
-            raise MsftodoAuthError(
-                "Microsoft Graph access forbidden. Check your app permissions (Tasks.Read scope)."
-            )
-        if resp.status_code in RETRY_STATUS_CODES:
-            last_exc = MsftodoFetchError(f"HTTP {resp.status_code}: {resp.text[:200]}")
-            time.sleep(BACKOFF_BASE * (2 ** attempt))
-            continue
-        if resp.status_code >= 400:
-            raise MsftodoFetchError(
-                f"MS Graph API error {resp.status_code}: {resp.text[:500]}"
-            )
-
-        return resp
-
-    raise last_exc  # type: ignore[misc]
-
-
 def _fetch_lists(client: httpx.Client) -> list[dict]:
     """Fetch all To Do task lists."""
     lists: list[dict] = []
-    url = f"{GRAPH_BASE}/me/todo/lists"
+    url: str | None = f"{GRAPH_BASE}/me/todo/lists"
 
     while url:
-        resp = _request_with_retry(client, "GET", url)
+        resp = _request(client, "GET", url)
         data = resp.json()
         lists.extend(data.get("value", []))
         url = data.get("@odata.nextLink")
@@ -170,10 +154,10 @@ def _fetch_tasks_for_list(
 ) -> list[dict]:
     """Fetch all tasks (including completed) from a single list."""
     tasks: list[dict] = []
-    url = f"{GRAPH_BASE}/me/todo/lists/{list_id}/tasks"
+    url: str | None = f"{GRAPH_BASE}/me/todo/lists/{list_id}/tasks"
 
     while url:
-        resp = _request_with_retry(client, "GET", url)
+        resp = _request(client, "GET", url)
         data = resp.json()
         tasks.extend(data.get("value", []))
         if console:

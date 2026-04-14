@@ -2,64 +2,52 @@
 
 from __future__ import annotations
 
-import time
 import httpx
 from rich.console import Console
 
+from src.sources._http import (
+    SourceAuthError, SourceFetchError,
+    request_with_retry, DEFAULT_TIMEOUT,
+)
+
 API_BASE = "https://api.notion.com/v1"
 NOTION_VERSION = "2022-06-28"
-DEFAULT_TIMEOUT = 30.0
-MAX_RETRIES = 3
-RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
-BACKOFF_BASE = 1.0
 PAGE_SIZE = 100
 
 
-class NotionAuthError(Exception):
+class NotionAuthError(SourceAuthError):
     """Raised when Notion authentication fails."""
 
 
-class NotionFetchError(Exception):
+class NotionFetchError(SourceFetchError):
     """Raised when Notion API returns an unexpected error."""
 
 
-def _request_with_retry(
-    client: httpx.Client, method: str, url: str, **kwargs
-) -> httpx.Response:
-    last_exc = None
-    for attempt in range(MAX_RETRIES):
-        try:
-            resp = client.request(method, url, **kwargs)
-        except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout) as exc:
-            last_exc = exc
-            time.sleep(BACKOFF_BASE * (2 ** attempt))
-            continue
+_AUTH_MESSAGES = {
+    401: (
+        "Notion authentication failed. Check your integration secret.\n"
+        "Create one at: https://www.notion.so/my-integrations"
+    ),
+    403: (
+        "Notion access forbidden. Make sure the integration is shared with your database.\n"
+        "Open the database in Notion -> Share -> Invite your integration."
+    ),
+}
 
-        if resp.status_code == 401:
-            raise NotionAuthError(
-                "Notion authentication failed. Check your integration secret.\n"
-                "Create one at: https://www.notion.so/my-integrations"
-            )
-        if resp.status_code == 403:
-            raise NotionAuthError(
-                "Notion access forbidden. Make sure the integration is shared with your database.\n"
-                "Open the database in Notion → Share → Invite your integration."
-            )
-        if resp.status_code in RETRY_STATUS_CODES:
-            last_exc = NotionFetchError(f"HTTP {resp.status_code}: {resp.text[:200]}")
-            time.sleep(BACKOFF_BASE * (2 ** attempt))
-            continue
-        if resp.status_code >= 400:
-            raise NotionFetchError(f"Notion API error {resp.status_code}: {resp.text[:500]}")
 
-        return resp
-
-    raise last_exc  # type: ignore[misc]
+def _request(client: httpx.Client, method: str, url: str, **kwargs) -> httpx.Response:
+    return request_with_retry(
+        client, method, url,
+        auth_error_cls=NotionAuthError,
+        fetch_error_cls=NotionFetchError,
+        auth_messages=_AUTH_MESSAGES,
+        **kwargs,
+    )
 
 
 def _fetch_database_title(client: httpx.Client, database_id: str) -> str | None:
     """Fetch the title of a Notion database."""
-    resp = _request_with_retry(client, "GET", f"{API_BASE}/databases/{database_id}")
+    resp = _request(client, "GET", f"{API_BASE}/databases/{database_id}")
     data = resp.json()
     title_parts = data.get("title", [])
     if title_parts:
@@ -81,7 +69,7 @@ def _fetch_database_pages(
         if start_cursor:
             body["start_cursor"] = start_cursor
 
-        resp = _request_with_retry(
+        resp = _request(
             client, "POST", f"{API_BASE}/databases/{database_id}/query", json=body
         )
         data = resp.json()
@@ -96,7 +84,6 @@ def _fetch_database_pages(
             break
         next_cursor = data.get("next_cursor")
         if not next_cursor:
-            # API says has_more but gave no cursor — break to avoid infinite loop
             break
         start_cursor = next_cursor
 

@@ -179,7 +179,7 @@ class TestFetchAll:
 class TestRetryLogic:
     @respx.mock
     def test_retry_on_429(self, db_fixture, pages_fixture, monkeypatch):
-        monkeypatch.setattr("src.sources.notion.BACKOFF_BASE", 0.0)
+        monkeypatch.setattr("src.sources._http.BACKOFF_BASE", 0.0)
         route_db = respx.get(f"{API_BASE}/databases/db-abc-123")
         route_db.side_effect = [
             httpx.Response(429, text="Rate limited"),
@@ -194,7 +194,7 @@ class TestRetryLogic:
 
     @respx.mock
     def test_retry_exhausted(self, monkeypatch):
-        monkeypatch.setattr("src.sources.notion.BACKOFF_BASE", 0.0)
+        monkeypatch.setattr("src.sources._http.BACKOFF_BASE", 0.0)
         route = respx.get(f"{API_BASE}/databases/db-abc-123")
         route.side_effect = [
             httpx.Response(503, text="Down"),
@@ -206,7 +206,7 @@ class TestRetryLogic:
 
     @respx.mock
     def test_retry_on_network_error(self, db_fixture, pages_fixture, monkeypatch):
-        monkeypatch.setattr("src.sources.notion.BACKOFF_BASE", 0.0)
+        monkeypatch.setattr("src.sources._http.BACKOFF_BASE", 0.0)
         route = respx.get(f"{API_BASE}/databases/db-abc-123")
         route.side_effect = [
             httpx.ConnectError("Connection refused"),

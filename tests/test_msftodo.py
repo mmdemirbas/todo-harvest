@@ -353,7 +353,7 @@ class TestRetryLogic:
     @respx.mock
     def test_retry_on_429(self, lists_fixture, monkeypatch):
         _mock_get_token(monkeypatch)
-        monkeypatch.setattr("src.sources.msftodo.BACKOFF_BASE", 0.0)
+        monkeypatch.setattr("src.sources._http.BACKOFF_BASE", 0.0)
         route = respx.get(LISTS_URL)
         route.side_effect = [
             httpx.Response(429, text="Rate limited"),
@@ -374,7 +374,7 @@ class TestRetryLogic:
     @respx.mock
     def test_retry_exhausted(self, monkeypatch):
         _mock_get_token(monkeypatch)
-        monkeypatch.setattr("src.sources.msftodo.BACKOFF_BASE", 0.0)
+        monkeypatch.setattr("src.sources._http.BACKOFF_BASE", 0.0)
         route = respx.get(LISTS_URL)
         route.side_effect = [
             httpx.Response(500, text="Error"),

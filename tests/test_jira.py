@@ -9,7 +9,6 @@ from pathlib import Path
 from src.sources.jira import (
     fetch_all,
     _build_auth_header,
-    _request_with_retry,
     JiraAuthError,
     JiraFetchError,
     PAGE_SIZE,
@@ -131,7 +130,7 @@ class TestFetchAll:
 class TestRetryLogic:
     @respx.mock
     def test_retry_on_429(self, jira_fixture, monkeypatch):
-        monkeypatch.setattr("src.sources.jira.BACKOFF_BASE", 0.0)
+        monkeypatch.setattr("src.sources._http.BACKOFF_BASE", 0.0)
         route = respx.get(SEARCH_URL)
         route.side_effect = [
             httpx.Response(429, text="Rate limited"),
@@ -143,7 +142,7 @@ class TestRetryLogic:
 
     @respx.mock
     def test_retry_on_500(self, jira_fixture, monkeypatch):
-        monkeypatch.setattr("src.sources.jira.BACKOFF_BASE", 0.0)
+        monkeypatch.setattr("src.sources._http.BACKOFF_BASE", 0.0)
         route = respx.get(SEARCH_URL)
         route.side_effect = [
             httpx.Response(500, text="Internal Server Error"),
@@ -154,7 +153,7 @@ class TestRetryLogic:
 
     @respx.mock
     def test_retry_exhausted_raises(self, monkeypatch):
-        monkeypatch.setattr("src.sources.jira.BACKOFF_BASE", 0.0)
+        monkeypatch.setattr("src.sources._http.BACKOFF_BASE", 0.0)
         route = respx.get(SEARCH_URL)
         route.side_effect = [
             httpx.Response(503, text="Unavailable"),
@@ -167,7 +166,7 @@ class TestRetryLogic:
 
     @respx.mock
     def test_retry_on_connect_error(self, jira_fixture, monkeypatch):
-        monkeypatch.setattr("src.sources.jira.BACKOFF_BASE", 0.0)
+        monkeypatch.setattr("src.sources._http.BACKOFF_BASE", 0.0)
         route = respx.get(SEARCH_URL)
         route.side_effect = [
             httpx.ConnectError("Connection refused"),
@@ -178,7 +177,7 @@ class TestRetryLogic:
 
     @respx.mock
     def test_retry_exhausted_on_network_error(self, monkeypatch):
-        monkeypatch.setattr("src.sources.jira.BACKOFF_BASE", 0.0)
+        monkeypatch.setattr("src.sources._http.BACKOFF_BASE", 0.0)
         route = respx.get(SEARCH_URL)
         route.side_effect = [
             httpx.ConnectError("fail"),
