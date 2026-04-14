@@ -68,18 +68,21 @@ def pull(config: dict, console: Console | None = None) -> list[dict]:
     }
 
     issues: list[dict] = []
-    start_at = 0
+    next_page_token: str | None = None
 
     with httpx.Client(timeout=DEFAULT_TIMEOUT, headers=headers) as client:
         while True:
-            params = {
+            body: dict = {
                 "jql": "ORDER BY created DESC",
                 "maxResults": PAGE_SIZE,
-                "startAt": start_at,
-                "fields": ",".join(JIRA_FIELDS),
+                "fields": list(JIRA_FIELDS),
             }
+            if next_page_token:
+                body["nextPageToken"] = next_page_token
+
             resp = _request(
-                client, "GET", f"{base_url}/rest/api/3/search", params=params
+                client, "POST", f"{base_url}/rest/api/3/search/jql",
+                json=body,
             )
             data = resp.json()
 
@@ -89,9 +92,8 @@ def pull(config: dict, console: Console | None = None) -> list[dict]:
             if console:
                 console.print(f"  Jira: fetched {len(issues)} issues...", end="\r")
 
-            total = data.get("total", 0)
-            start_at += len(batch)
-            if start_at >= total or not batch:
+            next_page_token = data.get("nextPageToken")
+            if data.get("isLast", True) or not batch:
                 break
 
     if console:

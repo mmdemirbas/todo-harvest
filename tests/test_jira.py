@@ -17,7 +17,7 @@ from src.sources.jira import (
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 BASE_URL = "https://test.atlassian.net"
-SEARCH_URL = f"{BASE_URL}/rest/api/3/search"
+SEARCH_URL = f"{BASE_URL}/rest/api/3/search/jql"
 
 JIRA_CONFIG = {
     "base_url": BASE_URL,
@@ -44,7 +44,7 @@ class TestBuildAuthHeader:
 class TestFetchAll:
     @respx.mock
     def test_single_page(self, jira_fixture):
-        respx.get(SEARCH_URL).mock(
+        respx.post(SEARCH_URL).mock(
             return_value=httpx.Response(200, json=jira_fixture)
         )
         issues = pull(JIRA_CONFIG)
@@ -55,24 +55,20 @@ class TestFetchAll:
     def test_pagination(self, jira_fixture):
         page1_data = {
             "issues": jira_fixture["issues"][:2],
-            "startAt": 0,
-            "maxResults": 2,
-            "total": 5,
+            "isLast": False,
+            "nextPageToken": "token-page2",
         }
         page2_data = {
             "issues": jira_fixture["issues"][2:4],
-            "startAt": 2,
-            "maxResults": 2,
-            "total": 5,
+            "isLast": False,
+            "nextPageToken": "token-page3",
         }
         page3_data = {
             "issues": jira_fixture["issues"][4:],
-            "startAt": 4,
-            "maxResults": 2,
-            "total": 5,
+            "isLast": True,
         }
 
-        route = respx.get(SEARCH_URL)
+        route = respx.post(SEARCH_URL)
         route.side_effect = [
             httpx.Response(200, json=page1_data),
             httpx.Response(200, json=page2_data),
@@ -85,9 +81,9 @@ class TestFetchAll:
 
     @respx.mock
     def test_empty_result(self):
-        respx.get(SEARCH_URL).mock(
+        respx.post(SEARCH_URL).mock(
             return_value=httpx.Response(200, json={
-                "issues": [], "startAt": 0, "maxResults": 100, "total": 0
+                "issues": [], "isLast": True
             })
         )
         issues = pull(JIRA_CONFIG)
@@ -97,7 +93,7 @@ class TestFetchAll:
     def test_with_console_does_not_crash(self, jira_fixture):
         """Verify that passing a Console object works (covers if console: branches)."""
         from rich.console import Console
-        respx.get(SEARCH_URL).mock(
+        respx.post(SEARCH_URL).mock(
             return_value=httpx.Response(200, json=jira_fixture)
         )
         issues = pull(JIRA_CONFIG, console=Console(quiet=True))
@@ -105,7 +101,7 @@ class TestFetchAll:
 
     @respx.mock
     def test_auth_error_401(self):
-        respx.get(SEARCH_URL).mock(
+        respx.post(SEARCH_URL).mock(
             return_value=httpx.Response(401, json={"message": "Unauthorized"})
         )
         with pytest.raises(JiraAuthError, match="authentication failed"):
@@ -113,7 +109,7 @@ class TestFetchAll:
 
     @respx.mock
     def test_auth_error_403(self):
-        respx.get(SEARCH_URL).mock(
+        respx.post(SEARCH_URL).mock(
             return_value=httpx.Response(403, json={"message": "Forbidden"})
         )
         with pytest.raises(JiraAuthError, match="access forbidden"):
@@ -121,7 +117,7 @@ class TestFetchAll:
 
     @respx.mock
     def test_client_error_400(self):
-        respx.get(SEARCH_URL).mock(
+        respx.post(SEARCH_URL).mock(
             return_value=httpx.Response(400, json={"message": "Bad JQL"})
         )
         with pytest.raises(JiraFetchError, match="400"):
@@ -130,7 +126,7 @@ class TestFetchAll:
     @respx.mock
     def test_trailing_slash_in_base_url(self, jira_fixture):
         config = {**JIRA_CONFIG, "base_url": BASE_URL + "/"}
-        respx.get(SEARCH_URL).mock(
+        respx.post(SEARCH_URL).mock(
             return_value=httpx.Response(200, json=jira_fixture)
         )
         issues = pull(config)
@@ -141,7 +137,7 @@ class TestRetryLogic:
     @respx.mock
     def test_retry_on_429(self, jira_fixture, monkeypatch):
         monkeypatch.setattr("src.sources._http.BACKOFF_BASE", 0.0)
-        route = respx.get(SEARCH_URL)
+        route = respx.post(SEARCH_URL)
         route.side_effect = [
             httpx.Response(429, text="Rate limited"),
             httpx.Response(200, json=jira_fixture),
@@ -153,7 +149,7 @@ class TestRetryLogic:
     @respx.mock
     def test_retry_on_500(self, jira_fixture, monkeypatch):
         monkeypatch.setattr("src.sources._http.BACKOFF_BASE", 0.0)
-        route = respx.get(SEARCH_URL)
+        route = respx.post(SEARCH_URL)
         route.side_effect = [
             httpx.Response(500, text="Internal Server Error"),
             httpx.Response(200, json=jira_fixture),
@@ -164,7 +160,7 @@ class TestRetryLogic:
     @respx.mock
     def test_retry_exhausted_raises(self, monkeypatch):
         monkeypatch.setattr("src.sources._http.BACKOFF_BASE", 0.0)
-        route = respx.get(SEARCH_URL)
+        route = respx.post(SEARCH_URL)
         route.side_effect = [
             httpx.Response(503, text="Unavailable"),
             httpx.Response(503, text="Unavailable"),
@@ -177,7 +173,7 @@ class TestRetryLogic:
     @respx.mock
     def test_retry_on_connect_error(self, jira_fixture, monkeypatch):
         monkeypatch.setattr("src.sources._http.BACKOFF_BASE", 0.0)
-        route = respx.get(SEARCH_URL)
+        route = respx.post(SEARCH_URL)
         route.side_effect = [
             httpx.ConnectError("Connection refused"),
             httpx.Response(200, json=jira_fixture),
@@ -188,7 +184,7 @@ class TestRetryLogic:
     @respx.mock
     def test_retry_exhausted_on_network_error(self, monkeypatch):
         monkeypatch.setattr("src.sources._http.BACKOFF_BASE", 0.0)
-        route = respx.get(SEARCH_URL)
+        route = respx.post(SEARCH_URL)
         route.side_effect = [
             httpx.ConnectError("fail"),
             httpx.ConnectError("fail"),
@@ -207,16 +203,19 @@ class TestPush:
 
 class TestPaginationEdgeCases:
     @respx.mock
-    def test_stops_on_empty_batch_before_total(self, jira_fixture):
-        """Server returns total=10 but empty batch on page 2 → stop early."""
+    def test_stops_on_empty_batch(self, jira_fixture):
+        """Server returns empty batch with isLast=False → stop early."""
         page1 = {
             "issues": jira_fixture["issues"][:2],
-            "startAt": 0, "maxResults": 100, "total": 10,
+            "isLast": False,
+            "nextPageToken": "token-2",
         }
         page2 = {
-            "issues": [], "startAt": 2, "maxResults": 100, "total": 10,
+            "issues": [],
+            "isLast": False,
+            "nextPageToken": "token-3",
         }
-        route = respx.get(SEARCH_URL)
+        route = respx.post(SEARCH_URL)
         route.side_effect = [
             httpx.Response(200, json=page1),
             httpx.Response(200, json=page2),
