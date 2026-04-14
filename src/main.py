@@ -9,19 +9,11 @@ from pathlib import Path
 from rich.console import Console
 
 from src.config import ConfigError, load_config, enabled_sources, validate_source, SOURCES
-from src.sources.jira import JiraAuthError, JiraFetchError
-from src.sources.notion import NotionAuthError, NotionFetchError
-from src.sources.msftodo import MsftodoAuthError, MsftodoFetchError
+from src.sources import REGISTRY
+from src.sources._http import SourceAuthError, SourceFetchError
 
 
 console = Console()
-
-# Known source errors — catch these specifically for clean messages
-_SOURCE_ERRORS = (
-    JiraAuthError, JiraFetchError,
-    NotionAuthError, NotionFetchError,
-    MsftodoAuthError, MsftodoFetchError,
-)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -102,9 +94,10 @@ def main(argv: list[str] | None = None) -> int:
             had_errors = True
             continue
 
+        source_def = REGISTRY[source]
         try:
-            raw_items = _fetch_source(source, config, console)
-        except _SOURCE_ERRORS as exc:
+            raw_items = source_def.fetch_all(config[source], console)
+        except (SourceAuthError, SourceFetchError) as exc:
             console.print(f"[bold red]{source} failed:[/] {exc}")
             had_errors = True
             continue
@@ -174,18 +167,3 @@ def main(argv: list[str] | None = None) -> int:
         console.print(f"  -> {f}")
 
     return 1 if had_errors else 0
-
-
-def _fetch_source(source: str, config: dict, console: Console) -> list[dict]:
-    """Dispatch to the appropriate source fetcher."""
-    if source == "jira":
-        from src.sources.jira import fetch_all
-        return fetch_all(config["jira"], console)
-    elif source == "notion":
-        from src.sources.notion import fetch_all
-        return fetch_all(config["notion"], console)
-    elif source == "msftodo":
-        from src.sources.msftodo import fetch_all
-        return fetch_all(config["msftodo"], console)
-    else:
-        raise ValueError(f"Unknown source: {source}")

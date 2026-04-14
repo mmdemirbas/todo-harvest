@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from src.main import main, parse_args
+from src.sources._http import SourceFetchError
 
 
 @pytest.fixture
@@ -33,71 +34,79 @@ msftodo:
     return cfg
 
 
+JIRA_ITEMS = [
+    {
+        "key": "TEST-1",
+        "self": "https://test.atlassian.net/rest/api/3/issue/1",
+        "fields": {
+            "summary": "Test Jira",
+            "description": None,
+            "status": {"name": "To Do", "statusCategory": {"key": "new"}},
+            "priority": {"name": "Medium", "id": "3"},
+            "issuetype": {"name": "Task", "subtask": False},
+            "project": {"key": "TEST", "name": "Test"},
+            "created": "2024-01-01T00:00:00Z",
+            "updated": "2024-01-01T00:00:00Z",
+            "duedate": None,
+            "labels": [],
+            "parent": None,
+        },
+    }
+]
+
+NOTION_ITEMS = [
+    {
+        "id": "page-1",
+        "created_time": "2024-01-01T00:00:00Z",
+        "last_edited_time": "2024-01-01T00:00:00Z",
+        "url": None,
+        "_database_id": "db-1",
+        "_database_title": "Board",
+        "properties": {
+            "Name": {
+                "type": "title",
+                "title": [{"plain_text": "Test Notion"}],
+            },
+            "Status": {"type": "select", "select": {"name": "Done"}},
+        },
+    }
+]
+
+MSFTODO_ITEMS = [
+    {
+        "id": "task-1",
+        "title": "Test MS ToDo",
+        "body": None,
+        "status": "notStarted",
+        "importance": "normal",
+        "createdDateTime": "2024-01-01T00:00:00Z",
+        "lastModifiedDateTime": "2024-01-01T00:00:00Z",
+        "dueDateTime": None,
+        "categories": [],
+        "_list_id": "list-1",
+        "_list_name": "Tasks",
+    }
+]
+
+_ITEMS_BY_SOURCE = {
+    "jira": JIRA_ITEMS,
+    "notion": NOTION_ITEMS,
+    "msftodo": MSFTODO_ITEMS,
+}
+
+
 @pytest.fixture
 def mock_sources():
-    """Mock all source fetch functions to return minimal data."""
-    jira_items = [
-        {
-            "key": "TEST-1",
-            "self": "https://test.atlassian.net/rest/api/3/issue/1",
-            "fields": {
-                "summary": "Test Jira",
-                "description": None,
-                "status": {"name": "To Do", "statusCategory": {"key": "new"}},
-                "priority": {"name": "Medium", "id": "3"},
-                "issuetype": {"name": "Task", "subtask": False},
-                "project": {"key": "TEST", "name": "Test"},
-                "created": "2024-01-01T00:00:00Z",
-                "updated": "2024-01-01T00:00:00Z",
-                "duedate": None,
-                "labels": [],
-                "parent": None,
-            },
-        }
-    ]
-    notion_items = [
-        {
-            "id": "page-1",
-            "created_time": "2024-01-01T00:00:00Z",
-            "last_edited_time": "2024-01-01T00:00:00Z",
-            "url": None,
-            "_database_id": "db-1",
-            "_database_title": "Board",
-            "properties": {
-                "Name": {
-                    "type": "title",
-                    "title": [{"plain_text": "Test Notion"}],
-                },
-                "Status": {"type": "select", "select": {"name": "Done"}},
-            },
-        }
-    ]
-    msftodo_items = [
-        {
-            "id": "task-1",
-            "title": "Test MS ToDo",
-            "body": None,
-            "status": "notStarted",
-            "importance": "normal",
-            "createdDateTime": "2024-01-01T00:00:00Z",
-            "lastModifiedDateTime": "2024-01-01T00:00:00Z",
-            "dueDateTime": None,
-            "categories": [],
-            "_list_id": "list-1",
-            "_list_name": "Tasks",
-        }
-    ]
-    with patch("src.main._fetch_source") as mock_fetch:
-        def side_effect(source, config, console):
-            if source == "jira":
-                return jira_items
-            elif source == "notion":
-                return notion_items
-            elif source == "msftodo":
-                return msftodo_items
-            return []
-        mock_fetch.side_effect = side_effect
-        yield mock_fetch
+    """Mock all source fetch_all via the registry."""
+    from src.sources import REGISTRY
+    originals = {}
+    for name, source_def in REGISTRY.items():
+        originals[name] = source_def.fetch_all
+        items = _ITEMS_BY_SOURCE[name]
+        source_def.fetch_all = lambda config, console=None, _items=items: list(_items)
+    yield
+    for name, source_def in REGISTRY.items():
+        source_def.fetch_all = originals[name]
 
 
 class TestParseArgs:
@@ -175,58 +184,50 @@ notion:
   token: ""
   database_ids: []
 """.format(output_dir=str(tmp_path / "output")))
-        # Jira works but notion skipped → partial success → exit 1
         result = main(["--config", str(cfg), "--source", "jira,notion"])
         assert result == 1
-        # But output files are still written for the working source
         assert (tmp_path / "output" / "jira.json").exists()
 
-    def test_fetch_error_continues_with_other_sources(self, config_file, tmp_path):
-        from src.sources.jira import JiraFetchError
-        with patch("src.main._fetch_source") as mock_fetch:
-            def side_effect(source, config, console):
-                if source == "jira":
-                    raise JiraFetchError("Connection failed")
-                return [{
-                    "id": "task-1", "title": "t", "body": None,
-                    "status": "notStarted", "importance": "normal",
-                    "createdDateTime": "2024-01-01T00:00:00Z",
-                    "lastModifiedDateTime": "2024-01-01T00:00:00Z",
-                    "dueDateTime": None, "categories": [],
-                    "_list_id": "l1", "_list_name": "L",
-                }]
-            mock_fetch.side_effect = side_effect
+    def test_fetch_error_continues_with_other_sources(self, config_file, tmp_path, mock_sources):
+        from src.sources import REGISTRY
+        orig = REGISTRY["jira"].fetch_all
+        def raise_fetch_error(config, console=None):
+            raise SourceFetchError("Connection failed")
+        REGISTRY["jira"].fetch_all = raise_fetch_error
+        try:
             result = main(["--config", str(config_file), "--source", "jira,msftodo"])
-        # One source failed → exit 1 even though msftodo succeeded
+        finally:
+            REGISTRY["jira"].fetch_all = orig
         assert result == 1
 
-    def test_unexpected_fetch_error_shows_traceback(self, config_file, tmp_path):
-        """Unexpected errors (not auth/fetch) show traceback with bug message."""
-        with patch("src.main._fetch_source") as mock_fetch:
-            mock_fetch.side_effect = TypeError("unexpected bug")
+    def test_unexpected_fetch_error_shows_traceback(self, config_file, tmp_path, mock_sources):
+        from src.sources import REGISTRY
+        orig = REGISTRY["jira"].fetch_all
+        def raise_bug(config, console=None):
+            raise TypeError("unexpected bug")
+        REGISTRY["jira"].fetch_all = raise_bug
+        try:
             result = main(["--config", str(config_file), "--source", "jira"])
+        finally:
+            REGISTRY["jira"].fetch_all = orig
         assert result == 1
 
-    def test_all_normalize_errors_returns_1(self, config_file, tmp_path):
-        """When every item fails normalization, exit code is 1."""
-        # Use _fetch_source mock returning items, then mock normalize at the
-        # deferred import site inside main() to force all items to fail
-        bad_items = [{"broken": True}, {"also_broken": True}]
-        with patch("src.main._fetch_source", return_value=bad_items):
-            # Patch at the module where normalize is defined — main() does
-            # a deferred 'from src.normalizer import normalize' so this works
-            with patch("src.normalizer.normalize", side_effect=ValueError("bad field")):
-                result = main(["--config", str(config_file), "--source", "jira"])
+    def test_all_normalize_errors_returns_1(self, config_file, tmp_path, mock_sources):
+        with patch("src.normalizer.normalize", side_effect=ValueError("bad field")):
+            result = main(["--config", str(config_file), "--source", "jira"])
         assert result == 1
 
     def test_no_items_collected_clean(self, config_file, tmp_path):
-        """Clean empty result (no errors) returns 0."""
-        with patch("src.main._fetch_source", return_value=[]):
+        from src.sources import REGISTRY
+        orig = REGISTRY["jira"].fetch_all
+        REGISTRY["jira"].fetch_all = lambda config, console=None: []
+        try:
             result = main(["--config", str(config_file), "--source", "jira"])
+        finally:
+            REGISTRY["jira"].fetch_all = orig
         assert result == 0
 
     def test_export_filesystem_error_returns_1(self, config_file, mock_sources, tmp_path):
-        """Disk full / permission denied on export produces error, not traceback."""
         result = main([
             "--config", str(config_file),
             "--source", "jira",

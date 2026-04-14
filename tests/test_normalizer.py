@@ -9,9 +9,9 @@ from pathlib import Path
 
 from src.normalizer import (
     normalize,
-    _normalize_jira,
-    _normalize_notion,
-    _normalize_msftodo,
+    normalize_jira,
+    normalize_notion,
+    normalize_msftodo,
     _extract_adf_text,
     _strip_html,
     _jira_category,

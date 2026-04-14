@@ -6,17 +6,14 @@ from pathlib import Path
 
 import yaml
 
+from src.sources import REGISTRY, SOURCE_NAMES
+
 
 DEFAULT_CONFIG_PATH = Path("config.yaml")
 DEFAULT_OUTPUT_DIR = "./output"
 
-SOURCES = ("msftodo", "jira", "notion")
-
-REQUIRED_KEYS = {
-    "msftodo": ["client_id", "tenant_id"],
-    "jira": ["base_url", "email", "api_token"],
-    "notion": ["token", "database_ids"],
-}
+# Re-export for backward compatibility with tests and main.py
+SOURCES = SOURCE_NAMES
 
 
 class ConfigError(Exception):
@@ -69,9 +66,11 @@ def validate_source(config: dict, source: str) -> list[str]:
         errors.append(f"Section '{source}' must be a mapping, got {type(section).__name__}")
         return errors
 
+    source_def = REGISTRY.get(source)
+    required_keys = source_def.required_keys if source_def else []
     list_keys = {"database_ids"}
 
-    for key in REQUIRED_KEYS.get(source, []):
+    for key in required_keys:
         val = section.get(key)
         if val is None:
             errors.append(f"'{source}.{key}' is missing in config.yaml")

@@ -16,15 +16,13 @@ def _strip_html(text: str) -> str:
     return " ".join(cleaned.split())
 
 
-_NORMALIZERS: dict[str, object] = {}  # populated after function definitions
-
-
 def normalize(source: str, raw: dict) -> dict:
     """Dispatch to the correct normalizer based on source name."""
-    fn = _NORMALIZERS.get(source)
-    if fn is None:
+    from src.sources import REGISTRY
+    source_def = REGISTRY.get(source)
+    if source_def is None:
         raise ValueError(f"Unknown source: {source}")
-    return fn(raw)
+    return source_def.normalize(raw)
 
 
 # ---------------------------------------------------------------------------
@@ -50,7 +48,7 @@ _JIRA_PRIORITY_MAP = {
 _JIRA_EPIC_LINK_FIELD = "customfield_10014"
 
 
-def _normalize_jira(raw: dict) -> dict:
+def normalize_jira(raw: dict) -> dict:
     fields = raw.get("fields", {})
     key = raw.get("key", raw.get("id", ""))
 
@@ -175,7 +173,7 @@ _NOTION_PRIORITY_MAP = {
 _NOTION_TAG_PROPERTIES = {"epic", "category", "project"}
 
 
-def _normalize_notion(raw: dict) -> dict:
+def normalize_notion(raw: dict) -> dict:
     props = raw.get("properties", {})
 
     # Title
@@ -303,7 +301,7 @@ _MSFTODO_IMPORTANCE_MAP = {
 }
 
 
-def _normalize_msftodo(raw: dict) -> dict:
+def normalize_msftodo(raw: dict) -> dict:
     task_id = raw.get("id", "")
 
     # Title
@@ -369,11 +367,3 @@ def _normalize_msftodo(raw: dict) -> dict:
         "category": category,
         "raw": raw,
     }
-
-
-# Populate the dispatch table now that all functions are defined
-_NORMALIZERS.update({
-    "jira": _normalize_jira,
-    "notion": _normalize_notion,
-    "msftodo": _normalize_msftodo,
-})

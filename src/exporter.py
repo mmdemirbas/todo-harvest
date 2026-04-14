@@ -6,24 +6,7 @@ import csv
 import json
 from pathlib import Path
 
-
-# CSV columns — deterministic order, excludes 'raw' (too large for CSV)
-CSV_COLUMNS = [
-    "id",
-    "source",
-    "title",
-    "description",
-    "status",
-    "priority",
-    "created_date",
-    "due_date",
-    "updated_date",
-    "tags",
-    "url",
-    "category_id",
-    "category_name",
-    "category_type",
-]
+from src.schema import CSV_COLUMNS
 
 
 def _sort_key(item: dict) -> tuple:
