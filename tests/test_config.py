@@ -177,6 +177,25 @@ class TestValidateSource:
         assert errors == []
 
 
+    def test_placeholder_todo_prefix_rejected(self, valid_config):
+        config = load_config(valid_config)
+        config["jira"]["api_token"] = "TODO_fill_this_in"
+        errors = validate_source(config, "jira")
+        assert any("placeholder" in e for e in errors)
+
+    def test_placeholder_fixme_prefix_rejected(self, valid_config):
+        config = load_config(valid_config)
+        config["jira"]["email"] = "FIXME_set_email"
+        errors = validate_source(config, "jira")
+        assert any("placeholder" in e for e in errors)
+
+    def test_unknown_source_returns_empty_errors(self, valid_config):
+        """Unknown source name passes validation silently (no required keys)."""
+        config = load_config(valid_config)
+        errors = validate_source(config, "github")
+        assert errors == [] or any("missing" in e for e in errors)
+
+
 class TestEnabledSources:
     def test_all_valid(self, valid_config):
         config = load_config(valid_config)
@@ -186,3 +205,26 @@ class TestEnabledSources:
     def test_partial(self, partial_config):
         config = load_config(partial_config)
         assert enabled_sources(config) == ["jira"]
+
+    def test_all_sources_including_vikunja(self, tmp_path):
+        cfg = tmp_path / "config.yaml"
+        cfg.write_text("""
+vikunja:
+  base_url: "http://localhost:3456"
+  api_token: "real-token"
+jira:
+  base_url: "https://test.atlassian.net"
+  email: "test@example.com"
+  api_token: "test-token"
+msftodo:
+  client_id: "test-client-id"
+  tenant_id: "consumers"
+notion:
+  token: "secret_test"
+  database_ids:
+    - "db-1"
+""")
+        config = load_config(cfg)
+        sources = enabled_sources(config)
+        assert "vikunja" in sources
+        assert len(sources) == 4

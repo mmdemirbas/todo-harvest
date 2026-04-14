@@ -407,6 +407,20 @@ class TestNormalizeNotion:
 
 
 class TestNotionHelpers:
+    def test_title_multiple_parts_joined(self):
+        props = {"Name": {"type": "title", "title": [
+            {"plain_text": "Part 1 "},
+            {"plain_text": "Part 2"},
+        ]}}
+        assert _notion_title(props) == "Part 1 Part 2"
+
+    def test_rich_text_multiple_parts_joined(self):
+        props = {"Description": {"type": "rich_text", "rich_text": [
+            {"plain_text": "Hello "},
+            {"plain_text": "world"},
+        ]}}
+        assert _notion_rich_text(props, "Description") == "Hello world"
+
     def test_title_no_title_property(self):
         assert _notion_title({"Name": {"type": "rich_text", "rich_text": []}}) == ""
 
@@ -742,3 +756,7 @@ class TestUnifiedSchema:
 
     def test_raw_is_dict(self, sample):
         assert isinstance(sample["raw"], dict)
+
+    def test_local_id_is_empty_string(self, sample):
+        """Normalizers produce empty local_id — assigned later by merge."""
+        assert sample["local_id"] == ""
