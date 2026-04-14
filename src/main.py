@@ -282,3 +282,7 @@ def _print_push_summary(results: list[dict]) -> None:
 
     console.print(table)
     console.print()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
