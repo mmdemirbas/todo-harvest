@@ -1,7 +1,7 @@
 """Unified schema for normalized TODO items.
 
 TypedDict definitions that enforce the contract between normalizers,
-exporter, and main.py at type-check time.
+local state, mapping, and CLI at type-check time.
 """
 
 from __future__ import annotations
@@ -16,12 +16,13 @@ class Category(TypedDict):
 
 
 class NormalizedItem(TypedDict):
-    id: str
-    source: str  # "msftodo" | "jira" | "notion"
+    id: str              # "{source}-{source_id}"
+    local_id: str        # stable UUID, assigned on first pull
+    source: str          # "vikunja" | "msftodo" | "jira" | "notion"
     title: str
     description: str | None
-    status: str  # "todo" | "in_progress" | "done" | "cancelled"
-    priority: str  # "critical" | "high" | "medium" | "low" | "none"
+    status: str          # "todo" | "in_progress" | "done" | "cancelled"
+    priority: str        # "critical" | "high" | "medium" | "low" | "none"
     created_date: str | None
     due_date: str | None
     updated_date: str | None
@@ -31,10 +32,24 @@ class NormalizedItem(TypedDict):
     raw: dict[str, Any]
 
 
+class PushResult(TypedDict):
+    created: int
+    updated: int
+    skipped: int
+
+
+class MergeStats(TypedDict):
+    created: int
+    updated: int
+    skipped: int
+    conflicts: int
+
+
 # Canonical field order for CSV export — derived from NormalizedItem keys,
 # with category flattened and raw excluded.
 CSV_COLUMNS: list[str] = [
     "id",
+    "local_id",
     "source",
     "title",
     "description",

@@ -1,0 +1,155 @@
+"""Local state management — todos.json as the source of truth.
+
+Reads, writes, and merges normalized items into the local state file.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from src.mapping import SyncMapping
+from src.schema import MergeStats, NormalizedItem
+
+
+DEFAULT_STATE_PATH = Path("todos.json")
+
+
+def _sort_key(item: dict) -> tuple:
+    return (item.get("source", ""), item.get("id", ""))
+
+
+def load_local_state(path: Path = DEFAULT_STATE_PATH) -> list[dict]:
+    """Read todos.json. Return [] if file doesn't exist."""
+    if not path.exists():
+        return []
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, list):
+        return []
+    return data
+
+
+def save_local_state(items: list[dict], path: Path = DEFAULT_STATE_PATH) -> None:
+    """Write todos.json sorted deterministically by (source, id)."""
+    sorted_items = sorted(items, key=_sort_key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(sorted_items, f, indent=2, ensure_ascii=False, default=str)
+
+
+def merge_pulled_items(
+    local_items: list[dict],
+    pulled_items: list[dict],
+    mapping: SyncMapping,
+    source: str,
+) -> tuple[list[dict], MergeStats]:
+    """Merge pulled items into local state using conflict resolution.
+
+    For each pulled item:
+    - If no local_id mapping exists: assign local_id, add to local state (created).
+    - If mapping exists and local item found: resolve field-by-field conflicts (updated/skipped).
+    - If mapping exists but local item missing: re-add to local state (created).
+
+    Returns (updated_local_items, stats).
+    """
+    stats: MergeStats = {"created": 0, "updated": 0, "skipped": 0, "conflicts": 0}
+
+    # Index local items by local_id for O(1) lookup
+    local_by_id: dict[str, dict] = {}
+    for item in local_items:
+        lid = item.get("local_id")
+        if lid:
+            local_by_id[lid] = item
+
+    for pulled in pulled_items:
+        source_id = pulled["id"]
+        local_id = mapping.get_local_id(source, source_id)
+
+        if local_id is None:
+            # New item — assign local_id, add to local state
+            local_id = mapping.generate_local_id()
+            pulled["local_id"] = local_id
+            mapping.upsert(
+                local_id, source, source_id,
+                source_updated_at=pulled.get("updated_date"),
+                local_updated_at=pulled.get("updated_date"),
+            )
+            mapping.mark_synced(local_id, source)
+            local_by_id[local_id] = pulled
+            stats["created"] += 1
+        else:
+            # Existing item — resolve conflicts field by field
+            pulled["local_id"] = local_id
+            local_item = local_by_id.get(local_id)
+
+            if local_item is None:
+                # Mapping exists but local item was deleted — re-add
+                mapping.upsert(
+                    local_id, source, source_id,
+                    source_updated_at=pulled.get("updated_date"),
+                    local_updated_at=pulled.get("updated_date"),
+                )
+                mapping.mark_synced(local_id, source)
+                local_by_id[local_id] = pulled
+                stats["created"] += 1
+            else:
+                # Merge fields
+                changed = _merge_fields(local_item, pulled, mapping, local_id, source)
+                if changed:
+                    mapping.upsert(
+                        local_id, source, source_id,
+                        source_updated_at=pulled.get("updated_date"),
+                        local_updated_at=local_item.get("updated_date"),
+                    )
+                    mapping.mark_synced(local_id, source)
+                    stats["updated"] += 1
+                else:
+                    mapping.mark_synced(local_id, source)
+                    stats["skipped"] += 1
+
+    return list(local_by_id.values()), stats
+
+
+# Fields that participate in conflict resolution during merge
+_MERGE_FIELDS = ("title", "description", "status", "priority", "due_date", "tags")
+
+
+def _merge_fields(
+    local_item: dict,
+    pulled_item: dict,
+    mapping: SyncMapping,
+    local_id: str,
+    source: str,
+) -> bool:
+    """Merge individual fields from pulled_item into local_item.
+
+    Returns True if any field was changed.
+    """
+    last_synced = mapping.get_last_synced_at(local_id, source)
+    changed = False
+
+    for field in _MERGE_FIELDS:
+        local_val = local_item.get(field)
+        source_val = pulled_item.get(field)
+
+        if local_val == source_val:
+            continue
+
+        winner_val, winner = mapping.resolve_conflict(
+            field,
+            local_val, local_item.get("updated_date"),
+            source_val, pulled_item.get("updated_date"),
+            last_synced,
+        )
+
+        if winner_val != local_val:
+            local_item[field] = winner_val
+            changed = True
+
+    # Always update raw and source-specific metadata
+    local_item["raw"] = pulled_item.get("raw", local_item.get("raw"))
+    local_item["url"] = pulled_item.get("url", local_item.get("url"))
+
+    return changed
