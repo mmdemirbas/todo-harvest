@@ -126,9 +126,13 @@ class TestParseArgs:
 
 
 class TestMainCLI:
-    def test_no_command_returns_1(self, config_file):
+    def test_no_command_shows_help(self, config_file, capsys):
+        """Bare `todo` prints top-level help and exits 0."""
         result = main(["--config", str(config_file)])
-        assert result == 1
+        assert result == 0
+        out = capsys.readouterr().out
+        assert "Sync commands" in out
+        assert "Local commands" in out
 
     def test_missing_config_returns_1(self, tmp_path):
         result = main(["--config", str(tmp_path / "nope.yaml"), "pull"])

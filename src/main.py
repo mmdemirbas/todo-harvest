@@ -20,36 +20,139 @@ console = Console()
 INSPECT_TARGETS = ("projects", "stats", "fields")
 
 
-_TOP_LEVEL_HELP = """Usage: todo [--config PATH] <command> [args...]
+# Color scheme (rich markup):
+#   section titles  → bold cyan
+#   command names   → bold green
+#   arg placeholders→ yellow
+#   option flags    → bold
+#   examples/notes  → dim
+#   values/services → magenta
+_TOP_LEVEL_HELP = """[bold]Usage:[/] [bold green]todo[/] [bold]\\[--config PATH][/] [yellow]<command>[/] [yellow]\\[args...][/]
 
 Collect, sync, and inspect TODO items across Vikunja, Jira, MS To Do, and Notion.
 
-Sync commands (network I/O):
-  pull [services...]       Fetch tasks from services into local state
-  push [services...]       Write local state back to services
-  sync [services...]       Pull, then push, the same set of services
+[bold cyan]Sync commands[/] [dim](network I/O)[/]:
+  [bold green]pull[/]    [yellow]\\[services...][/]       Fetch tasks from services into local state
+  [bold green]push[/]    [yellow]\\[services...][/]       Write local state back to services
+  [bold green]sync[/]    [yellow]\\[services...][/]       Pull, then push, the same set of services
 
-Local commands (no network):
-  inspect <target> [args]  Inspect local data. Targets: projects, stats, fields
-  export [--output-dir]    Snapshot local state to JSON/CSV files
+[bold cyan]Local commands[/] [dim](no network)[/]:
+  [bold green]inspect[/] [yellow]<target> \\[args][/]     Inspect local data. Targets: [magenta]projects[/], [magenta]stats[/], [magenta]fields[/]
+  [bold green]export[/]  [yellow]\\[--output-dir][/]      Snapshot local state to JSON/CSV files
 
-Help:
-  help [command]           Show detailed help for a command
+[bold cyan]Help[/]:
+  [bold green]help[/]    [yellow]\\[command][/]           Show detailed help for a command
 
-Global options:
-  --config PATH            Path to config.yaml (default: ./config.yaml)
-  -h, --help               Show this message
+[bold cyan]Global options[/]:
+  [bold]--config PATH[/]            Path to [magenta]config.yaml[/] [dim](default: ./config.yaml)[/]
+  [bold]-h, --help[/]               Show this message
 
-Services: vikunja, jira, mstodo, notion
-Run 'todo help <command>' for command-specific arguments and examples.
+[dim]Services:[/] [magenta]vikunja[/], [magenta]jira[/], [magenta]mstodo[/], [magenta]notion[/]
+[dim]Run [/][bold green]'todo help <command>'[/][dim] for command-specific arguments and examples.[/]
 """
 
 
+# Per-command colored help. Used by both `todo help <cmd>` and `todo <cmd> --help`.
+_SUB_HELP: dict[str, str] = {}
+
+
+def _sync_cmd_help(cmd: str, verb: str) -> str:
+    return f"""[bold]Usage:[/] [bold green]todo[/] [bold green]{cmd}[/] [yellow]\\[service...][/]
+
+{verb}
+
+[bold cyan]Arguments[/]:
+  [yellow]service[/]              Service(s) to [bold green]{cmd}[/]. Omit to use every configured service.
+                       [dim]Choices: [/][magenta]vikunja[/], [magenta]jira[/], [magenta]mstodo[/], [magenta]notion[/]
+
+[bold cyan]Options[/]:
+  [bold]-h, --help[/]           Show this message
+
+[bold cyan]Examples[/]:
+  [bold green]todo {cmd}[/]                          [dim]# all configured services[/]
+  [bold green]todo {cmd}[/] [magenta]jira[/] [magenta]notion[/]              [dim]# only these services[/]
+"""
+
+
+_SUB_HELP["pull"] = _sync_cmd_help("pull", "Fetch tasks from services into local state.")
+_SUB_HELP["push"] = _sync_cmd_help("push", "Write local state back to services.")
+_SUB_HELP["sync"] = _sync_cmd_help("sync", "Pull, then push, the same set of services.")
+
+_SUB_HELP["export"] = """[bold]Usage:[/] [bold green]todo[/] [bold green]export[/] [bold]\\[--output-dir DIR][/]
+
+Snapshot local state to JSON and CSV files.
+
+[bold cyan]Options[/]:
+  [bold]--output-dir DIR[/]     Directory to write snapshot files.
+                       [dim](default: [/][magenta]output.dir[/][dim] from config.yaml)[/]
+  [bold]-h, --help[/]           Show this message
+
+[bold cyan]Examples[/]:
+  [bold green]todo export[/]
+  [bold green]todo export[/] [bold]--output-dir[/] [magenta]~/snapshots[/]
+"""
+
+_SUB_HELP["inspect"] = """[bold]Usage:[/] [bold green]todo[/] [bold green]inspect[/] [yellow]<target>[/] [yellow]\\[args...][/]
+
+Inspect local data without hitting any service.
+
+[bold cyan]Targets[/]:
+  [magenta]projects[/] [yellow]\\[source][/]    List project/list/database IDs and names.
+                       [dim]Use this to discover IDs (e.g. for [/][bold yellow]vikunja.default_project_id[/][dim]).[/]
+  [magenta]stats[/]               Counts, field coverage, date ranges, status distribution.
+  [magenta]fields[/] [yellow]\\[source][/]      Unique status/priority values + top tags.
+                       [dim]Useful for finding values that need mapping in config.yaml.[/]
+
+[bold cyan]Arguments[/]:
+  [yellow]source[/]              [dim]Optional.[/] Filter to one source.
+                       [dim]Choices: [/][magenta]vikunja[/], [magenta]jira[/], [magenta]mstodo[/], [magenta]notion[/]
+
+[bold cyan]Examples[/]:
+  [bold green]todo inspect projects[/]                      [dim]# all sources[/]
+  [bold green]todo inspect projects[/] [magenta]vikunja[/]             [dim]# just Vikunja projects + IDs[/]
+  [bold green]todo inspect stats[/]
+  [bold green]todo inspect fields[/] [magenta]jira[/]                  [dim]# spot unmapped statuses/priorities[/]
+"""
+
+_SUB_HELP["help"] = """[bold]Usage:[/] [bold green]todo[/] [bold green]help[/] [yellow]\\[command][/]
+
+Show detailed help for a command, or top-level help if no command is given.
+
+[bold cyan]Arguments[/]:
+  [yellow]command[/]             [dim]Optional.[/] Command to show help for.
+                       [dim]Choices: [/][bold green]pull[/], [bold green]push[/], [bold green]sync[/], [bold green]inspect[/], [bold green]export[/], [bold green]help[/]
+
+[bold cyan]Examples[/]:
+  [bold green]todo help[/]                          [dim]# top-level overview[/]
+  [bold green]todo help[/] [bold green]pull[/]                     [dim]# detailed pull help[/]
+  [bold green]todo help[/] [bold green]inspect[/]                  [dim]# detailed inspect help[/]
+"""
+
+
+def _print_colored(markup_text: str) -> None:
+    """Render a rich-markup help string to the console."""
+    console.print(markup_text, end="", highlight=False)
+
+
 class _TodoParser(argparse.ArgumentParser):
-    """ArgumentParser with a custom grouped top-level help."""
+    """Top-level parser with a custom colored grouped help."""
 
     def format_help(self) -> str:  # type: ignore[override]
-        return _TOP_LEVEL_HELP
+        return _TOP_LEVEL_HELP  # kept for tests that call format_help()
+
+    def print_help(self, file=None) -> None:  # type: ignore[override]
+        _print_colored(_TOP_LEVEL_HELP)
+
+
+class _ColoredSubParser(argparse.ArgumentParser):
+    """Subparser that prints a pre-formatted colored help instead of argparse default."""
+
+    def print_help(self, file=None) -> None:  # type: ignore[override]
+        markup = _SUB_HELP.get(self.prog.split()[-1])
+        if markup is not None:
+            _print_colored(markup)
+        else:
+            super().print_help(file)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -62,7 +165,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = parser.add_subparsers(
         dest="command", metavar="<command>",
-        parser_class=argparse.ArgumentParser,
+        parser_class=_ColoredSubParser,
     )
 
     # --- pull / push / sync --------------------------------------------------
@@ -124,7 +227,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     inspect_sub = inspect_p.add_subparsers(
         dest="target", metavar="<target>",
-        parser_class=argparse.ArgumentParser,
+        parser_class=_ColoredSubParser,
     )
 
     projects_p = inspect_sub.add_parser(
@@ -180,16 +283,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    # -h/--help → top-level help (same as `help` with no topic)
-    if getattr(args, "help", False) and not args.command:
-        console.print(_TOP_LEVEL_HELP, end="", highlight=False, markup=False)
+    # Bare `todo` and `-h/--help` both print top-level help and exit 0.
+    if getattr(args, "help", False) or args.command is None:
+        _print_colored(_TOP_LEVEL_HELP)
         return 0
 
     command = args.command
-    if command is None:
-        console.print("[bold yellow]No command specified.[/] Run 'todo help' for usage.")
-        return 1
-
     if command == "help":
         return _cmd_help(parser, args.topic)
 
@@ -238,21 +337,16 @@ def main(argv: list[str] | None = None) -> int:
 def _cmd_help(parser: argparse.ArgumentParser, topic: str | None) -> int:
     """Print top-level help, or help for a specific subcommand."""
     if topic is None:
-        console.print(_TOP_LEVEL_HELP, end="", highlight=False, markup=False)
+        _print_colored(_TOP_LEVEL_HELP)
         return 0
 
-    subparsers_action = next(
-        (a for a in parser._actions if isinstance(a, argparse._SubParsersAction)),
-        None,
-    )
-    if subparsers_action is None or topic not in subparsers_action.choices:
-        console.print(f"[red]Unknown command:[/] {topic}")
-        console.print("Run 'todo help' to see available commands.")
-        return 1
+    if topic in _SUB_HELP:
+        _print_colored(_SUB_HELP[topic])
+        return 0
 
-    sub_parser = subparsers_action.choices[topic]
-    sub_parser.print_help()
-    return 0
+    console.print(f"[red]Unknown command:[/] {topic}")
+    console.print("Run [bold green]'todo help'[/] to see available commands.")
+    return 1
 
 
 def _resolve_services(config: dict, requested: list[str]) -> tuple[list[str], str | None]:
