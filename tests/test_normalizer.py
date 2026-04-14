@@ -13,6 +13,7 @@ from src.normalizer import (
     _normalize_notion,
     _normalize_msftodo,
     _extract_adf_text,
+    _strip_html,
     _jira_category,
     _notion_title,
     _notion_select_value,
@@ -541,9 +542,18 @@ class TestNormalizeMsftodo:
         result = normalize("msftodo", tasks[0])
         assert result["raw"] is tasks[0]
 
-    def test_html_body_content(self, tasks):
+    def test_html_body_stripped(self, tasks):
         result = normalize("msftodo", tasks[4])
         assert result["description"] == "Review notes from cancelled meeting."
+        assert "<" not in result["description"]
+
+    def test_plain_text_body_not_stripped(self):
+        raw = {
+            "id": "t", "body": {"content": "Plain <text> content", "contentType": "text"},
+            "_list_id": "l", "_list_name": "L",
+        }
+        result = normalize("msftodo", raw)
+        assert result["description"] == "Plain <text> content"
 
     def test_empty_raw(self):
         result = normalize("msftodo", {})
@@ -552,6 +562,29 @@ class TestNormalizeMsftodo:
         assert result["priority"] == "none"
         assert result["description"] is None
         assert result["tags"] == []
+
+
+class TestStripHtml:
+    def test_strips_basic_tags(self):
+        assert _strip_html("<p>Hello</p>") == "Hello"
+
+    def test_strips_nested_tags(self):
+        assert _strip_html("<p>Hello <b>world</b></p>") == "Hello world"
+
+    def test_collapses_whitespace(self):
+        assert _strip_html("<p>  Hello  </p>  <p>  World  </p>") == "Hello World"
+
+    def test_empty_string(self):
+        assert _strip_html("") == ""
+
+    def test_no_tags(self):
+        assert _strip_html("plain text") == "plain text"
+
+    def test_self_closing_tags(self):
+        assert _strip_html("line1<br/>line2") == "line1line2"
+
+    def test_br_with_space(self):
+        assert _strip_html("line1 <br/> line2") == "line1 line2"
 
 
 class TestUnifiedSchema:

@@ -1,5 +1,7 @@
 """Notion API v1 source — fetches pages from specified databases."""
 
+from __future__ import annotations
+
 import time
 import httpx
 from rich.console import Console

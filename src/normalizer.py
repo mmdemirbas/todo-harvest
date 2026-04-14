@@ -3,6 +3,18 @@
 All functions here are pure — no I/O, no side effects.
 """
 
+from __future__ import annotations
+
+import re
+
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _strip_html(text: str) -> str:
+    """Remove HTML tags, collapse whitespace."""
+    cleaned = _HTML_TAG_RE.sub("", text)
+    return " ".join(cleaned.split())
+
 
 def normalize(source: str, raw: dict) -> dict:
     """Dispatch to the correct normalizer based on source name."""
@@ -299,11 +311,16 @@ def _normalize_msftodo(raw: dict) -> dict:
     # Title
     title = raw.get("title", "")
 
-    # Description
+    # Description — strip HTML if contentType is html
     body = raw.get("body")
     if body and isinstance(body, dict):
         content = body.get("content", "")
-        description = content if content.strip() else None
+        if not content.strip():
+            description = None
+        elif body.get("contentType") == "html":
+            description = _strip_html(content)
+        else:
+            description = content
     else:
         description = None
 

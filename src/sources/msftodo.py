@@ -1,5 +1,7 @@
 """Microsoft To Do source via MS Graph API with MSAL device code auth."""
 
+from __future__ import annotations
+
 import os
 import tempfile
 import time

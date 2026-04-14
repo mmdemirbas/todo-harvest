@@ -1,5 +1,7 @@
 """Export normalized TODO items to JSON and CSV files."""
 
+from __future__ import annotations
+
 import csv
 import json
 from pathlib import Path

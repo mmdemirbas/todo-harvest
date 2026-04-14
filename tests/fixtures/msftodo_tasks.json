@@ -74,7 +74,7 @@
       "id": "task-005",
       "title": "Cancelled meeting follow-up",
       "body": {
-        "content": "Review notes from cancelled meeting.",
+        "content": "<p>Review notes from <b>cancelled</b> meeting.</p>",
         "contentType": "html"
       },
       "status": "notStarted",

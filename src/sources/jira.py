@@ -1,5 +1,7 @@
 """Jira REST API v3 source — fetches all issues with pagination and retry."""
 
+from __future__ import annotations
+
 import base64
 import httpx
 from rich.console import Console
