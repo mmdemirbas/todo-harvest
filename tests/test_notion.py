@@ -7,7 +7,7 @@ import respx
 from pathlib import Path
 
 from src.sources.notion import (
-    fetch_all,
+    pull,
     _fetch_database_title,
     _fetch_database_pages,
     NotionAuthError,
@@ -116,7 +116,7 @@ class TestFetchAll:
         respx.post(f"{API_BASE}/databases/db-abc-123/query").mock(
             return_value=httpx.Response(200, json=pages_fixture)
         )
-        pages = fetch_all(NOTION_CONFIG)
+        pages = pull(NOTION_CONFIG)
         assert len(pages) == 5
         assert pages[0]["_database_id"] == "db-abc-123"
         assert pages[0]["_database_title"] == "Task Board"
@@ -147,7 +147,7 @@ class TestFetchAll:
             return_value=httpx.Response(200, json=pages2)
         )
 
-        pages = fetch_all(config)
+        pages = pull(config)
         assert len(pages) == 6
         assert pages[5]["_database_title"] == "Second DB"
 
@@ -157,7 +157,7 @@ class TestFetchAll:
             return_value=httpx.Response(401, json={"message": "Unauthorized"})
         )
         with pytest.raises(NotionAuthError, match="authentication failed"):
-            fetch_all(NOTION_CONFIG)
+            pull(NOTION_CONFIG)
 
     @respx.mock
     def test_auth_error_403(self):
@@ -165,7 +165,7 @@ class TestFetchAll:
             return_value=httpx.Response(403, json={"message": "Forbidden"})
         )
         with pytest.raises(NotionAuthError, match="access forbidden"):
-            fetch_all(NOTION_CONFIG)
+            pull(NOTION_CONFIG)
 
     @respx.mock
     def test_client_error(self):
@@ -173,7 +173,7 @@ class TestFetchAll:
             return_value=httpx.Response(400, json={"message": "Bad request"})
         )
         with pytest.raises(NotionFetchError, match="400"):
-            fetch_all(NOTION_CONFIG)
+            pull(NOTION_CONFIG)
 
 
 class TestRetryLogic:
@@ -188,7 +188,7 @@ class TestRetryLogic:
         respx.post(f"{API_BASE}/databases/db-abc-123/query").mock(
             return_value=httpx.Response(200, json=pages_fixture)
         )
-        pages = fetch_all(NOTION_CONFIG)
+        pages = pull(NOTION_CONFIG)
         assert len(pages) == 5
         assert route_db.call_count == 2
 
@@ -202,7 +202,7 @@ class TestRetryLogic:
             httpx.Response(503, text="Down"),
         ]
         with pytest.raises(NotionFetchError):
-            fetch_all(NOTION_CONFIG)
+            pull(NOTION_CONFIG)
 
     @respx.mock
     def test_retry_on_network_error(self, db_fixture, pages_fixture, monkeypatch):
@@ -215,7 +215,7 @@ class TestRetryLogic:
         respx.post(f"{API_BASE}/databases/db-abc-123/query").mock(
             return_value=httpx.Response(200, json=pages_fixture)
         )
-        pages = fetch_all(NOTION_CONFIG)
+        pages = pull(NOTION_CONFIG)
         assert len(pages) == 5
 
 

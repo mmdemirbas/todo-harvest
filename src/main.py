@@ -96,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
 
         source_def = REGISTRY[source]
         try:
-            raw_items = source_def.fetch_all(config[source], console)
+            raw_items = source_def.pull(config[source], console)
         except (SourceAuthError, SourceFetchError) as exc:
             console.print(f"[bold red]{source} failed:[/] {exc}")
             had_errors = True

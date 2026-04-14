@@ -160,7 +160,7 @@ def _fetch_tasks_for_list(client: httpx.Client, list_id: str) -> list[dict]:
     return tasks
 
 
-def fetch_all(config: dict, console: Console | None = None) -> list[dict]:
+def pull(config: dict, console: Console | None = None) -> list[dict]:
     """Fetch all tasks from all Microsoft To Do lists.
 
     Each returned dict is a raw task object, augmented with
@@ -199,3 +199,8 @@ def fetch_all(config: dict, console: Console | None = None) -> list[dict]:
         console.print(f"  Microsoft To Do: fetched {len(all_tasks)} tasks total.")
 
     return all_tasks
+
+
+def push(config: dict, tasks: list[dict], console: Console | None = None) -> dict:
+    """Write normalized tasks to Microsoft To Do. Not yet implemented."""
+    raise NotImplementedError("Push not yet implemented for msftodo")

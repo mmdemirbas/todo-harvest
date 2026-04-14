@@ -54,7 +54,7 @@ def _request(client: httpx.Client, method: str, url: str, **kwargs) -> httpx.Res
     )
 
 
-def fetch_all(config: dict, console: Console | None = None) -> list[dict]:
+def pull(config: dict, console: Console | None = None) -> list[dict]:
     """Fetch all Jira issues across all projects.
 
     Returns a list of raw Jira issue dicts.
@@ -98,3 +98,8 @@ def fetch_all(config: dict, console: Console | None = None) -> list[dict]:
         console.print(f"  Jira: fetched {len(issues)} issues total.")
 
     return issues
+
+
+def push(config: dict, tasks: list[dict], console: Console | None = None) -> dict:
+    """Write normalized tasks to Jira. Not yet implemented."""
+    raise NotImplementedError("Push not yet implemented for jira")

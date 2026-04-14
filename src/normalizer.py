@@ -26,6 +26,70 @@ def normalize(source: str, raw: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Vikunja
+# ---------------------------------------------------------------------------
+
+_VIKUNJA_PRIORITY_MAP = {
+    0: "none",
+    1: "low",
+    2: "medium",
+    3: "high",
+    4: "critical",
+}
+
+
+def normalize_vikunja(raw: dict) -> dict:
+    task_id = raw.get("id", "")
+
+    # Status: Vikunja uses a 'done' boolean
+    done = raw.get("done", False)
+    status = "done" if done else "todo"
+
+    # Priority: Vikunja uses 0-4 integer
+    priority_int = raw.get("priority", 0)
+    priority = _VIKUNJA_PRIORITY_MAP.get(priority_int, "none")
+
+    # Description
+    description = raw.get("description") or None
+
+    # Due date
+    due_date = raw.get("due_date")
+    if due_date == "0001-01-01T00:00:00Z":
+        due_date = None
+
+    # Tags from labels
+    labels = raw.get("labels") or []
+    tags = [label.get("title", "") for label in labels if label.get("title")]
+
+    # URL
+    url = None
+
+    # Category — project
+    category = {
+        "id": str(raw.get("_project_id", "")),
+        "name": raw.get("_project_title"),
+        "type": "project",
+    }
+
+    return {
+        "id": f"vikunja-{task_id}",
+        "local_id": "",  # assigned by merge_pulled_items
+        "source": "vikunja",
+        "title": raw.get("title", ""),
+        "description": description,
+        "status": status,
+        "priority": priority,
+        "created_date": raw.get("created"),
+        "due_date": due_date,
+        "updated_date": raw.get("updated"),
+        "tags": tags,
+        "url": url,
+        "category": category,
+        "raw": raw,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Jira
 # ---------------------------------------------------------------------------
 
@@ -81,6 +145,7 @@ def normalize_jira(raw: dict) -> dict:
 
     return {
         "id": f"jira-{key}",
+        "local_id": "",  # assigned by merge_pulled_items
         "source": "jira",
         "title": fields.get("summary", ""),
         "description": description,
@@ -216,6 +281,7 @@ def normalize_notion(raw: dict) -> dict:
 
     return {
         "id": f"notion-{raw.get('id', '')}",
+        "local_id": "",
         "source": "notion",
         "title": title,
         "description": description,
@@ -354,6 +420,7 @@ def normalize_msftodo(raw: dict) -> dict:
 
     return {
         "id": f"msftodo-{task_id}",
+        "local_id": "",
         "source": "msftodo",
         "title": title,
         "description": description,

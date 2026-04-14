@@ -17,6 +17,10 @@ def config_file(tmp_path):
 output:
   dir: "{output_dir}"
 
+vikunja:
+  base_url: "http://localhost:3456"
+  api_token: "test-vikunja-token"
+
 jira:
   base_url: "https://test.atlassian.net"
   email: "test@example.com"
@@ -88,7 +92,24 @@ MSFTODO_ITEMS = [
     }
 ]
 
+VIKUNJA_ITEMS = [
+    {
+        "id": 1,
+        "title": "Test Vikunja",
+        "description": "",
+        "done": False,
+        "priority": 2,
+        "due_date": "0001-01-01T00:00:00Z",
+        "created": "2024-01-01T00:00:00Z",
+        "updated": "2024-01-01T00:00:00Z",
+        "labels": [],
+        "_project_id": 1,
+        "_project_title": "Test Project",
+    }
+]
+
 _ITEMS_BY_SOURCE = {
+    "vikunja": VIKUNJA_ITEMS,
     "jira": JIRA_ITEMS,
     "notion": NOTION_ITEMS,
     "msftodo": MSFTODO_ITEMS,
@@ -97,16 +118,16 @@ _ITEMS_BY_SOURCE = {
 
 @pytest.fixture
 def mock_sources():
-    """Mock all source fetch_all via the registry."""
+    """Mock all source pull via the registry."""
     from src.sources import REGISTRY
     originals = {}
     for name, source_def in REGISTRY.items():
-        originals[name] = source_def.fetch_all
+        originals[name] = source_def.pull
         items = _ITEMS_BY_SOURCE[name]
-        source_def.fetch_all = lambda config, console=None, _items=items: list(_items)
+        source_def.pull = lambda config, console=None, _items=items: list(_items)
     yield
     for name, source_def in REGISTRY.items():
-        source_def.fetch_all = originals[name]
+        source_def.pull = originals[name]
 
 
 class TestParseArgs:
@@ -190,26 +211,26 @@ notion:
 
     def test_fetch_error_continues_with_other_sources(self, config_file, tmp_path, mock_sources):
         from src.sources import REGISTRY
-        orig = REGISTRY["jira"].fetch_all
+        orig = REGISTRY["jira"].pull
         def raise_fetch_error(config, console=None):
             raise SourceFetchError("Connection failed")
-        REGISTRY["jira"].fetch_all = raise_fetch_error
+        REGISTRY["jira"].pull = raise_fetch_error
         try:
             result = main(["--config", str(config_file), "--source", "jira,msftodo"])
         finally:
-            REGISTRY["jira"].fetch_all = orig
+            REGISTRY["jira"].pull = orig
         assert result == 1
 
     def test_unexpected_fetch_error_shows_traceback(self, config_file, tmp_path, mock_sources):
         from src.sources import REGISTRY
-        orig = REGISTRY["jira"].fetch_all
+        orig = REGISTRY["jira"].pull
         def raise_bug(config, console=None):
             raise TypeError("unexpected bug")
-        REGISTRY["jira"].fetch_all = raise_bug
+        REGISTRY["jira"].pull = raise_bug
         try:
             result = main(["--config", str(config_file), "--source", "jira"])
         finally:
-            REGISTRY["jira"].fetch_all = orig
+            REGISTRY["jira"].pull = orig
         assert result == 1
 
     def test_all_normalize_errors_returns_1(self, config_file, tmp_path, mock_sources):
@@ -219,12 +240,12 @@ notion:
 
     def test_no_items_collected_clean(self, config_file, tmp_path):
         from src.sources import REGISTRY
-        orig = REGISTRY["jira"].fetch_all
-        REGISTRY["jira"].fetch_all = lambda config, console=None: []
+        orig = REGISTRY["jira"].pull
+        REGISTRY["jira"].pull = lambda config, console=None: []
         try:
             result = main(["--config", str(config_file), "--source", "jira"])
         finally:
-            REGISTRY["jira"].fetch_all = orig
+            REGISTRY["jira"].pull = orig
         assert result == 0
 
     def test_export_filesystem_error_returns_1(self, config_file, mock_sources, tmp_path):

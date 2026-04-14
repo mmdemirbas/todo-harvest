@@ -34,6 +34,7 @@ def export_csv(items: list[dict], path: Path) -> None:
         for item in sorted_items:
             row = {
                 "id": item.get("id", ""),
+                "local_id": item.get("local_id", ""),
                 "source": item.get("source", ""),
                 "title": item.get("title", ""),
                 "description": item.get("description") or "",

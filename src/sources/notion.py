@@ -90,7 +90,7 @@ def _fetch_database_pages(
     return pages
 
 
-def fetch_all(config: dict, console: Console | None = None) -> list[dict]:
+def pull(config: dict, console: Console | None = None) -> list[dict]:
     """Fetch all pages from all configured Notion databases.
 
     Each returned dict is a Notion page object, augmented with
@@ -122,3 +122,8 @@ def fetch_all(config: dict, console: Console | None = None) -> list[dict]:
         console.print(f"  Notion: fetched {len(all_pages)} pages total.")
 
     return all_pages
+
+
+def push(config: dict, tasks: list[dict], console: Console | None = None) -> dict:
+    """Notion is pull-only. Push is not supported."""
+    raise NotImplementedError("Notion is pull-only. Push is not supported.")

@@ -180,7 +180,8 @@ class TestValidateSource:
 class TestEnabledSources:
     def test_all_valid(self, valid_config):
         config = load_config(valid_config)
-        assert enabled_sources(config) == ["msftodo", "jira", "notion"]
+        # Order follows REGISTRY key order; vikunja not in config so skipped
+        assert enabled_sources(config) == ["jira", "msftodo", "notion"]
 
     def test_partial(self, partial_config):
         config = load_config(partial_config)

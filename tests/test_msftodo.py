@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from src.sources.msftodo import (
-    fetch_all,
+    pull,
     _fetch_lists,
     _fetch_tasks_for_list,
     _get_token,
@@ -324,7 +324,7 @@ class TestFetchAll:
             return_value=httpx.Response(200, json=empty_tasks)
         )
 
-        tasks = fetch_all(MSFTODO_CONFIG)
+        tasks = pull(MSFTODO_CONFIG)
         assert len(tasks) == 6  # 5 + 1
         assert tasks[0]["_list_name"] == "Personal"
         assert tasks[0]["_list_id"] == "list-001"
@@ -337,7 +337,7 @@ class TestFetchAll:
             return_value=httpx.Response(401, json={"error": {"message": "Unauthorized"}})
         )
         with pytest.raises(MsftodoAuthError, match="authentication failed"):
-            fetch_all(MSFTODO_CONFIG)
+            pull(MSFTODO_CONFIG)
 
     @respx.mock
     def test_empty_lists(self, monkeypatch):
@@ -345,7 +345,7 @@ class TestFetchAll:
         respx.get(LISTS_URL).mock(
             return_value=httpx.Response(200, json={"value": []})
         )
-        tasks = fetch_all(MSFTODO_CONFIG)
+        tasks = pull(MSFTODO_CONFIG)
         assert tasks == []
 
 
@@ -368,7 +368,7 @@ class TestRetryLogic:
         respx.get(f"{GRAPH_BASE}/me/todo/lists/list-003/tasks").mock(
             return_value=httpx.Response(200, json={"value": []})
         )
-        tasks = fetch_all(MSFTODO_CONFIG)
+        tasks = pull(MSFTODO_CONFIG)
         assert route.call_count == 2
 
     @respx.mock
@@ -382,7 +382,7 @@ class TestRetryLogic:
             httpx.Response(500, text="Error"),
         ]
         with pytest.raises(MsftodoFetchError):
-            fetch_all(MSFTODO_CONFIG)
+            pull(MSFTODO_CONFIG)
 
 
 class TestFixtureData:

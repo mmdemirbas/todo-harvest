@@ -7,7 +7,7 @@ import respx
 from pathlib import Path
 
 from src.sources.jira import (
-    fetch_all,
+    pull,
     _build_auth_header,
     JiraAuthError,
     JiraFetchError,
@@ -47,7 +47,7 @@ class TestFetchAll:
         respx.get(SEARCH_URL).mock(
             return_value=httpx.Response(200, json=jira_fixture)
         )
-        issues = fetch_all(JIRA_CONFIG)
+        issues = pull(JIRA_CONFIG)
         assert len(issues) == 5
         assert issues[0]["key"] == "PROJ-1"
 
@@ -79,7 +79,7 @@ class TestFetchAll:
             httpx.Response(200, json=page3_data),
         ]
 
-        issues = fetch_all(JIRA_CONFIG)
+        issues = pull(JIRA_CONFIG)
         assert len(issues) == 5
         assert route.call_count == 3
 
@@ -90,7 +90,7 @@ class TestFetchAll:
                 "issues": [], "startAt": 0, "maxResults": 100, "total": 0
             })
         )
-        issues = fetch_all(JIRA_CONFIG)
+        issues = pull(JIRA_CONFIG)
         assert issues == []
 
     @respx.mock
@@ -100,7 +100,7 @@ class TestFetchAll:
         respx.get(SEARCH_URL).mock(
             return_value=httpx.Response(200, json=jira_fixture)
         )
-        issues = fetch_all(JIRA_CONFIG, console=Console(quiet=True))
+        issues = pull(JIRA_CONFIG, console=Console(quiet=True))
         assert len(issues) == 5
 
     @respx.mock
@@ -109,7 +109,7 @@ class TestFetchAll:
             return_value=httpx.Response(401, json={"message": "Unauthorized"})
         )
         with pytest.raises(JiraAuthError, match="authentication failed"):
-            fetch_all(JIRA_CONFIG)
+            pull(JIRA_CONFIG)
 
     @respx.mock
     def test_auth_error_403(self):
@@ -117,7 +117,7 @@ class TestFetchAll:
             return_value=httpx.Response(403, json={"message": "Forbidden"})
         )
         with pytest.raises(JiraAuthError, match="access forbidden"):
-            fetch_all(JIRA_CONFIG)
+            pull(JIRA_CONFIG)
 
     @respx.mock
     def test_client_error_400(self):
@@ -125,7 +125,7 @@ class TestFetchAll:
             return_value=httpx.Response(400, json={"message": "Bad JQL"})
         )
         with pytest.raises(JiraFetchError, match="400"):
-            fetch_all(JIRA_CONFIG)
+            pull(JIRA_CONFIG)
 
     @respx.mock
     def test_trailing_slash_in_base_url(self, jira_fixture):
@@ -133,7 +133,7 @@ class TestFetchAll:
         respx.get(SEARCH_URL).mock(
             return_value=httpx.Response(200, json=jira_fixture)
         )
-        issues = fetch_all(config)
+        issues = pull(config)
         assert len(issues) == 5
 
 
@@ -146,7 +146,7 @@ class TestRetryLogic:
             httpx.Response(429, text="Rate limited"),
             httpx.Response(200, json=jira_fixture),
         ]
-        issues = fetch_all(JIRA_CONFIG)
+        issues = pull(JIRA_CONFIG)
         assert len(issues) == 5
         assert route.call_count == 2
 
@@ -158,7 +158,7 @@ class TestRetryLogic:
             httpx.Response(500, text="Internal Server Error"),
             httpx.Response(200, json=jira_fixture),
         ]
-        issues = fetch_all(JIRA_CONFIG)
+        issues = pull(JIRA_CONFIG)
         assert len(issues) == 5
 
     @respx.mock
@@ -171,7 +171,7 @@ class TestRetryLogic:
             httpx.Response(503, text="Unavailable"),
         ]
         with pytest.raises(JiraFetchError):
-            fetch_all(JIRA_CONFIG)
+            pull(JIRA_CONFIG)
         assert route.call_count == 3
 
     @respx.mock
@@ -182,7 +182,7 @@ class TestRetryLogic:
             httpx.ConnectError("Connection refused"),
             httpx.Response(200, json=jira_fixture),
         ]
-        issues = fetch_all(JIRA_CONFIG)
+        issues = pull(JIRA_CONFIG)
         assert len(issues) == 5
 
     @respx.mock
@@ -195,7 +195,7 @@ class TestRetryLogic:
             httpx.ConnectError("fail"),
         ]
         with pytest.raises(httpx.ConnectError):
-            fetch_all(JIRA_CONFIG)
+            pull(JIRA_CONFIG)
 
 
 class TestFixtureData:
