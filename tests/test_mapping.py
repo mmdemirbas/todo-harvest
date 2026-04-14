@@ -129,6 +129,24 @@ class TestConflictResolution:
         assert val == "high"
         assert winner == "source"
 
+    def test_neither_side_changed_after_sync_source_wins(self):
+        """Both timestamps before last_synced, values differ → source wins."""
+        val, winner = SyncMapping.resolve_conflict(
+            "title",
+            "Old Local", "2024-01-01T00:00:00Z",
+            "Old Source", "2024-01-15T00:00:00Z",
+            "2024-06-01T00:00:00Z",  # last synced well after both
+        )
+        assert val == "Old Source"
+        assert winner == "source"
+
+    def test_upsert_changes_local_id_on_remap(self, mapping):
+        """Re-mapping a (source, source_id) to a new local_id works."""
+        mapping.upsert("lid-1", "jira", "PROJ-1")
+        assert mapping.get_local_id("jira", "PROJ-1") == "lid-1"
+        mapping.upsert("lid-2", "jira", "PROJ-1")
+        assert mapping.get_local_id("jira", "PROJ-1") == "lid-2"
+
 
 class TestSyncLog:
     def test_log_and_retrieve(self, mapping):

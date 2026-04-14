@@ -198,3 +198,22 @@ class TestMergePulledItems:
         local, stats = merge_pulled_items(local_items, [], mapping, "jira")
         assert stats == {"created": 0, "updated": 0, "skipped": 0, "conflicts": 0}
         assert len(local) == 1
+
+    def test_pull_preserves_items_from_other_sources(self, mapping):
+        """Pulling jira items must not lose existing notion items in local state."""
+        notion_item = _make_item("notion", "page-1", title="Notion Task", local_id="lid-notion")
+        jira_pulled = [_make_item("jira", "PROJ-1", title="Jira Task")]
+
+        local, stats = merge_pulled_items([notion_item], jira_pulled, mapping, "jira")
+        assert stats["created"] == 1
+        sources = {item["source"] for item in local}
+        assert "notion" in sources
+        assert "jira" in sources
+        assert len(local) == 2
+
+    def test_corrupt_json_raises(self, tmp_path):
+        """Corrupt state file must not be silently swallowed."""
+        path = tmp_path / "bad.json"
+        path.write_text("{not valid json", encoding="utf-8")
+        with pytest.raises(json.JSONDecodeError):
+            load_local_state(path)
