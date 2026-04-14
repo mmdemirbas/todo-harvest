@@ -216,6 +216,14 @@ _VIKUNJA_PRIORITY_TO_INT = {
 }
 
 
+def _to_rfc3339(value: str) -> str:
+    """Vikunja expects RFC3339 datetimes. Promote date-only strings to midnight UTC."""
+    import re
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", value):
+        return f"{value}T00:00:00Z"
+    return value
+
+
 def _to_vikunja_payload(task: dict) -> dict:
     """Convert a normalized task to a Vikunja API payload."""
     payload: dict = {
@@ -234,7 +242,7 @@ def _to_vikunja_payload(task: dict) -> dict:
 
     due_date = task.get("due_date")
     if due_date:
-        payload["due_date"] = due_date
+        payload["due_date"] = _to_rfc3339(due_date)
 
     tags = task.get("tags", [])
     if tags:

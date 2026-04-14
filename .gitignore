@@ -5,7 +5,7 @@ __pycache__/
 venv/
 output/
 config.yaml
-mapping.db
+mapping.db*
 todos.json
 .todo_harvest_msal_cache.json
 .pytest_cache/
@@ -14,3 +14,4 @@ htmlcov/
 *.egg-info/
 dist/
 build/
+.idea

@@ -390,7 +390,12 @@ class TestToVikunjaPayload:
     def test_with_due_date(self):
         task = {"title": "T", "due_date": "2024-03-01"}
         payload = _to_vikunja_payload(task)
-        assert payload["due_date"] == "2024-03-01"
+        assert payload["due_date"] == "2024-03-01T00:00:00Z"
+
+    def test_with_due_datetime_preserved(self):
+        task = {"title": "T", "due_date": "2024-03-01T15:30:00Z"}
+        payload = _to_vikunja_payload(task)
+        assert payload["due_date"] == "2024-03-01T15:30:00Z"
 
 
 class TestRetryLogic:
