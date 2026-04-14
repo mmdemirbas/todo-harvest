@@ -16,13 +16,24 @@ The `todo` script creates a virtual environment on first run and installs all de
 ### Usage
 
 ```bash
+# Sync commands (hit the network)
 ./todo pull                       # pull from all configured services
 ./todo pull jira mstodo           # pull from specific services
 ./todo push vikunja               # push local state to vikunja
 ./todo sync                       # pull all, then push all
-./todo sync jira vikunja          # sync between jira and vikunja
-./todo export                     # export local state to JSON/CSV
+
+# Local commands (no network)
+./todo inspect projects           # list project/list/database IDs per source
+./todo inspect projects vikunja   # just Vikunja — useful for default_project_id
+./todo inspect stats              # task counts, field coverage, date ranges
+./todo inspect fields jira        # unique status/priority/tag values
+
+./todo export                     # snapshot local state to JSON/CSV
 ./todo export --output-dir ~/out  # export to custom directory
+
+# Help
+./todo help                       # grouped overview of all commands
+./todo help pull                  # detailed help for one command
 ./todo --test                     # run tests with coverage report
 ```
 

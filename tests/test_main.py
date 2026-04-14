@@ -303,3 +303,120 @@ class TestExport:
         main(["--config", str(config_file), "pull", "jira"])
         result = main(["--config", str(config_file), "export", "--output-dir", "/nonexistent/path"])
         assert result == 1
+
+
+class TestHelp:
+    def test_help_no_args_returns_0(self):
+        assert main(["help"]) == 0
+
+    def test_help_for_known_command_returns_0(self):
+        assert main(["help", "pull"]) == 0
+        assert main(["help", "push"]) == 0
+        assert main(["help", "sync"]) == 0
+        assert main(["help", "inspect"]) == 0
+        assert main(["help", "export"]) == 0
+        assert main(["help", "help"]) == 0
+
+    def test_help_for_unknown_command_returns_1(self):
+        assert main(["help", "nosuchcommand"]) == 1
+
+    def test_dash_h_flag(self):
+        assert main(["-h"]) == 0
+
+    def test_dash_dash_help_flag(self):
+        assert main(["--help"]) == 0
+
+    def test_top_level_help_lists_all_commands(self, capsys):
+        main(["help"])
+        out = capsys.readouterr().out
+        for cmd in ("pull", "push", "sync", "inspect", "export", "help"):
+            assert cmd in out
+
+    def test_help_groups_by_function(self, capsys):
+        main(["help"])
+        out = capsys.readouterr().out
+        assert "Sync commands" in out
+        assert "Local commands" in out
+        assert "Help:" in out
+
+    def test_subcommand_help_shows_arguments(self, capsys):
+        main(["help", "pull"])
+        out = capsys.readouterr().out
+        assert "service" in out
+        assert "vikunja" in out  # choices listed
+
+
+class TestInspect:
+    @pytest.fixture
+    def populated(self, config_file, mock_sources):
+        main(["--config", str(config_file), "pull", "jira", "vikunja"])
+        return config_file
+
+    def test_inspect_no_target_returns_1(self, populated):
+        result = main(["--config", str(populated), "inspect"])
+        assert result == 1
+
+    def test_inspect_projects_all_sources(self, populated):
+        result = main(["--config", str(populated), "inspect", "projects"])
+        assert result == 0
+
+    def test_inspect_projects_filtered_by_source(self, populated):
+        result = main(["--config", str(populated), "inspect", "projects", "vikunja"])
+        assert result == 0
+
+    def test_inspect_projects_shows_ids(self, populated, capsys):
+        main(["--config", str(populated), "inspect", "projects", "vikunja"])
+        out = capsys.readouterr().out
+        # Vikunja mock item has _project_id=1, _project_title="Project"
+        assert "Project" in out
+        assert "1" in out
+
+    def test_inspect_stats(self, populated):
+        result = main(["--config", str(populated), "inspect", "stats"])
+        assert result == 0
+
+    def test_inspect_stats_contains_status_distribution(self, populated, capsys):
+        main(["--config", str(populated), "inspect", "stats"])
+        out = capsys.readouterr().out
+        assert "Status distribution" in out
+        assert "todo" in out
+
+    def test_inspect_fields(self, populated):
+        result = main(["--config", str(populated), "inspect", "fields"])
+        assert result == 0
+
+    def test_inspect_fields_filtered(self, populated, capsys):
+        main(["--config", str(populated), "inspect", "fields", "jira"])
+        out = capsys.readouterr().out
+        assert "jira" in out
+        assert "status:" in out or "status" in out
+
+    def test_inspect_without_local_data_returns_1(self, config_file):
+        # No pull done — no todos.json
+        result = main(["--config", str(config_file), "inspect", "projects"])
+        assert result == 1
+
+    def test_inspect_does_not_need_valid_config(self, tmp_path, monkeypatch):
+        # inspect reads only local state, not service credentials.
+        # Run in a clean cwd so the real project's ./output doesn't leak in.
+        monkeypatch.chdir(tmp_path)
+        result = main(["--config", str(tmp_path / "nope.yaml"), "inspect", "stats"])
+        assert result == 1  # no local data
+
+
+class TestStrictCli:
+    def test_invalid_subcommand_fails(self, capsys):
+        with pytest.raises(SystemExit):
+            main(["unknown"])
+
+    def test_multiple_service_args_parse_as_list(self):
+        args = parse_args(["pull", "jira", "vikunja", "notion"])
+        assert args.services == ["jira", "vikunja", "notion"]
+
+    def test_unknown_service_returns_1(self, config_file):
+        result = main(["--config", str(config_file), "pull", "foo"])
+        assert result == 1
+
+    def test_inspect_invalid_target_fails(self):
+        with pytest.raises(SystemExit):
+            main(["inspect", "nosuchtarget"])
