@@ -176,6 +176,26 @@ class TestFetchAll:
             pull(NOTION_CONFIG)
 
 
+    @respx.mock
+    def test_pull_with_console_does_not_crash(self, db_fixture, pages_fixture):
+        from rich.console import Console
+        respx.get(f"{API_BASE}/databases/db-abc-123").mock(
+            return_value=httpx.Response(200, json=db_fixture)
+        )
+        respx.post(f"{API_BASE}/databases/db-abc-123/query").mock(
+            return_value=httpx.Response(200, json=pages_fixture)
+        )
+        pages = pull(NOTION_CONFIG, console=Console(quiet=True))
+        assert len(pages) == 5
+
+
+class TestPush:
+    def test_push_raises_not_implemented(self):
+        from src.sources.notion import push
+        with pytest.raises(NotImplementedError, match="pull-only"):
+            push({}, [])
+
+
 class TestRetryLogic:
     @respx.mock
     def test_retry_on_429(self, db_fixture, pages_fixture, monkeypatch):

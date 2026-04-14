@@ -110,6 +110,48 @@ class TestPull:
             pull(VIKUNJA_CONFIG)
 
     @respx.mock
+    def test_pull_with_console_does_not_crash(self, tasks_fixture, projects_fixture):
+        from rich.console import Console
+        respx.get(url__startswith=PROJECTS_URL).mock(
+            side_effect=[
+                httpx.Response(200, json=projects_fixture),
+                httpx.Response(200, json=[]),
+            ]
+        )
+        respx.get(url__startswith=TASKS_URL).mock(
+            side_effect=[
+                httpx.Response(200, json=tasks_fixture),
+                httpx.Response(200, json=[]),
+            ]
+        )
+        tasks = pull(VIKUNJA_CONFIG, console=Console(quiet=True))
+        assert len(tasks) == 5
+
+    @respx.mock
+    def test_pull_with_paginated_projects(self, tasks_fixture):
+        """Projects split across two pages — verify project titles resolve."""
+        proj_page1 = [{"id": 1, "title": "ProjectA"}]
+        proj_page2 = [{"id": 2, "title": "ProjectB"}]
+
+        respx.get(url__startswith=PROJECTS_URL).mock(
+            side_effect=[
+                httpx.Response(200, json=proj_page1),
+                httpx.Response(200, json=proj_page2),
+                httpx.Response(200, json=[]),
+            ]
+        )
+        # All tasks from project 2
+        tasks_proj2 = [dict(t, project_id=2, _project_id=2) for t in tasks_fixture[:1]]
+        respx.get(url__startswith=TASKS_URL).mock(
+            side_effect=[
+                httpx.Response(200, json=tasks_proj2),
+                httpx.Response(200, json=[]),
+            ]
+        )
+        tasks = pull(VIKUNJA_CONFIG)
+        assert tasks[0]["_project_title"] == "ProjectB"
+
+    @respx.mock
     def test_trailing_slash_in_base_url(self, tasks_fixture, projects_fixture):
         config = {**VIKUNJA_CONFIG, "base_url": BASE_URL + "/"}
         respx.get(url__startswith=PROJECTS_URL).mock(
@@ -174,6 +216,24 @@ class TestPush:
         )
         with pytest.raises(VikunjaAuthError):
             push(VIKUNJA_CONFIG, [task])
+
+    @respx.mock
+    def test_fetch_error_on_push(self):
+        task = {"title": "T", "_vikunja_id": 42}
+        respx.post(f"{BASE_URL}/api/v1/tasks/42").mock(
+            return_value=httpx.Response(500, text="Internal Server Error")
+        )
+        with pytest.raises(VikunjaFetchError, match="500"):
+            push(VIKUNJA_CONFIG, [task])
+
+    @respx.mock
+    def test_push_with_console_does_not_crash(self):
+        from rich.console import Console
+        task = {"title": "T", "_vikunja_id": None, "_vikunja_project_id": 1}
+        respx.put(f"{BASE_URL}/api/v1/projects/1/tasks").mock(
+            return_value=httpx.Response(200, json={"id": 10}))
+        result = push(VIKUNJA_CONFIG, [task], console=Console(quiet=True))
+        assert result["created"] == 1
 
 
 class TestNormalizeVikunja:

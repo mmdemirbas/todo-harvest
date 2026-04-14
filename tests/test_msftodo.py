@@ -385,6 +385,35 @@ class TestRetryLogic:
             pull(MSFTODO_CONFIG)
 
 
+class TestPush:
+    def test_push_raises_not_implemented(self):
+        from src.sources.msftodo import push
+        with pytest.raises(NotImplementedError, match="not yet implemented for msftodo"):
+            push({}, [])
+
+
+class TestPullWithConsole:
+    @respx.mock
+    def test_pull_with_console_does_not_crash(self, lists_fixture, tasks_fixture, monkeypatch):
+        from rich.console import Console
+        _mock_get_token(monkeypatch)
+        respx.get(LISTS_URL).mock(return_value=httpx.Response(200, json=lists_fixture))
+        respx.get(f"{GRAPH_BASE}/me/todo/lists/list-001/tasks").mock(
+            return_value=httpx.Response(200, json=tasks_fixture))
+        respx.get(f"{GRAPH_BASE}/me/todo/lists/list-002/tasks").mock(
+            return_value=httpx.Response(200, json={"value": []}))
+        respx.get(f"{GRAPH_BASE}/me/todo/lists/list-003/tasks").mock(
+            return_value=httpx.Response(200, json={"value": []}))
+        tasks = pull(MSFTODO_CONFIG, console=Console(quiet=True))
+        assert len(tasks) == 5
+
+
+class TestCachePath:
+    def test_get_cache_path_returns_xdg_location(self):
+        path = _get_cache_path()
+        assert str(path).endswith(".config/todo-harvest/msal_cache.json")
+
+
 class TestFixtureData:
     @pytest.fixture
     def tasks(self, tasks_fixture):

@@ -198,6 +198,34 @@ class TestRetryLogic:
             pull(JIRA_CONFIG)
 
 
+class TestPush:
+    def test_push_raises_not_implemented(self):
+        from src.sources.jira import push
+        with pytest.raises(NotImplementedError, match="not yet implemented for jira"):
+            push({}, [])
+
+
+class TestPaginationEdgeCases:
+    @respx.mock
+    def test_stops_on_empty_batch_before_total(self, jira_fixture):
+        """Server returns total=10 but empty batch on page 2 → stop early."""
+        page1 = {
+            "issues": jira_fixture["issues"][:2],
+            "startAt": 0, "maxResults": 100, "total": 10,
+        }
+        page2 = {
+            "issues": [], "startAt": 2, "maxResults": 100, "total": 10,
+        }
+        route = respx.get(SEARCH_URL)
+        route.side_effect = [
+            httpx.Response(200, json=page1),
+            httpx.Response(200, json=page2),
+        ]
+        issues = pull(JIRA_CONFIG)
+        assert len(issues) == 2
+        assert route.call_count == 2
+
+
 class TestFixtureData:
     """Verify the fixture data has the expected edge cases."""
 
