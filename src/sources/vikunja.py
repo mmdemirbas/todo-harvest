@@ -58,7 +58,7 @@ def pull(config: dict, console: Console | None = None) -> list[dict]:
         page = 1
         while True:
             resp = _request(
-                client, "GET", f"{base_url}/api/v1/tasks/all",
+                client, "GET", f"{base_url}/api/v1/tasks",
                 params={"page": page, "per_page": 50},
             )
             tasks = resp.json()

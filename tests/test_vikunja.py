@@ -20,7 +20,7 @@ from src.normalizer import normalize_vikunja
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 BASE_URL = "http://localhost:3456"
-TASKS_URL = f"{BASE_URL}/api/v1/tasks/all"
+TASKS_URL = f"{BASE_URL}/api/v1/tasks"
 PROJECTS_URL = f"{BASE_URL}/api/v1/projects"
 
 VIKUNJA_CONFIG = {
