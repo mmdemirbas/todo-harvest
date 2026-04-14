@@ -7,10 +7,12 @@ Personal CLI tool that collects TODO items from Microsoft To Do, Jira, and Notio
 ```
 src/
   sources/
+    __init__.py    — Source registry (REGISTRY, SourceDef)
     _http.py       — Shared HTTP retry logic (request_with_retry)
     jira.py        — Jira REST API v3 client
     notion.py      — Notion API v1 client
     msftodo.py     — MS Graph API + MSAL device code auth
+  schema.py        — TypedDict definitions (NormalizedItem, Category, CSV_COLUMNS)
   normalizer.py    — Pure functions: raw payload → unified schema
   exporter.py      — JSON + CSV output with deterministic sorting
   config.py        — YAML config loading and validation
@@ -29,11 +31,22 @@ Each source module exposes:
 
 The normalizer reads source-specific injected keys (`_list_id`, `_database_title`, etc.) that each source's `fetch_all` attaches to raw dicts.
 
+### Source registry
+
+`src/sources/__init__.py` contains `REGISTRY` — the single source of truth for available sources. Each entry maps a source name to its module path, normalize function, and required config keys.
+
+To add a new source, create the module and add one entry to `REGISTRY`.
+
+### Schema types
+
+`src/schema.py` defines `NormalizedItem` and `Category` as `TypedDict`. All normalizers produce this shape. `CSV_COLUMNS` is derived from the schema and used by the exporter.
+
 ## Conventions
 
 ### Python version
 - Minimum: Python 3.10 (uses `X | Y` union syntax in annotations)
 - All modules use `from __future__ import annotations` for 3.9 tolerance
+- `pyproject.toml` declares `requires-python = ">= 3.10"`
 
 ### Error handling
 - Known source errors (auth, fetch) are caught specifically in main.py
@@ -50,11 +63,11 @@ The normalizer reads source-specific injected keys (`_list_id`, `_database_title
 
 ### Adding a new source
 
-Currently requires changes in 4 files:
-1. `src/sources/newsource.py` — implement `fetch_all()`, error classes inheriting from `_http.py`
-2. `src/config.py` — add to `SOURCES` tuple and `REQUIRED_KEYS` dict
-3. `src/normalizer.py` — add `_normalize_newsource()` and register in `_NORMALIZERS`
-4. `src/main.py` — add branch in `_fetch_source()` dispatch
+1. Create `src/sources/newsource.py` — implement `fetch_all()`, error classes inheriting from `_http.py`
+2. Add `normalize_newsource()` to `src/normalizer.py`
+3. Add one entry to `REGISTRY` in `src/sources/__init__.py`
+
+Config validation and CLI dispatch are automatic via the registry.
 
 ### Token cache
 - MSAL cache lives at `~/.config/todo-harvest/msal_cache.json`
@@ -70,7 +83,5 @@ Currently requires changes in 4 files:
 
 ## Known limitations (deferred by design)
 
-- Package named `src/` (not `todo_harvest/`) — no pyproject.toml yet
+- Package named `src/` (not `todo_harvest/`) — no PyPI publishing planned
 - No parallel database/list fetching (sequential, network-bound)
-- `fields=*all` in Jira (could be optimized to specific fields)
-- No source registry — dispatch is manual if/elif
