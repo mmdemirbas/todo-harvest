@@ -579,6 +579,89 @@ class TestNormalizeMsftodo:
         assert result["tags"] == []
 
 
+class TestMsftodoStatusMappingGaps:
+    """Cover status values in _MSFTODO_STATUS_MAP that had no fixture coverage."""
+
+    def test_waiting_on_others(self):
+        raw = {"id": "t", "status": "waitingOnOthers", "_list_id": "l", "_list_name": "L"}
+        result = normalize("msftodo", raw)
+        assert result["status"] == "in_progress"
+
+    def test_deferred(self):
+        raw = {"id": "t", "status": "deferred", "_list_id": "l", "_list_name": "L"}
+        result = normalize("msftodo", raw)
+        assert result["status"] == "todo"
+
+    def test_unknown_status_defaults_to_todo(self):
+        raw = {"id": "t", "status": "someNewStatus", "_list_id": "l", "_list_name": "L"}
+        result = normalize("msftodo", raw)
+        assert result["status"] == "todo"
+
+    def test_unknown_importance_defaults_to_none(self):
+        raw = {"id": "t", "importance": "urgent", "_list_id": "l", "_list_name": "L"}
+        result = normalize("msftodo", raw)
+        assert result["priority"] == "none"
+
+
+class TestNotionPropertyNameFallbacks:
+    """Cover Notion property name fallbacks that had no fixture."""
+
+    def test_notes_property_as_description(self):
+        raw = {
+            "id": "p", "_database_id": "db", "_database_title": "DB",
+            "properties": {
+                "Name": {"type": "title", "title": [{"plain_text": "Task"}]},
+                "Notes": {"type": "rich_text", "rich_text": [
+                    {"plain_text": "Some notes here"}
+                ]},
+            },
+        }
+        result = normalize("notion", raw)
+        assert result["description"] == "Some notes here"
+
+    def test_due_property_as_date(self):
+        raw = {
+            "id": "p", "_database_id": "db", "_database_title": "DB",
+            "properties": {
+                "Name": {"type": "title", "title": [{"plain_text": "Task"}]},
+                "Due": {"type": "date", "date": {"start": "2024-06-15"}},
+            },
+        }
+        result = normalize("notion", raw)
+        assert result["due_date"] == "2024-06-15"
+
+    def test_deadline_property_as_date(self):
+        raw = {
+            "id": "p", "_database_id": "db", "_database_title": "DB",
+            "properties": {
+                "Name": {"type": "title", "title": [{"plain_text": "Task"}]},
+                "Deadline": {"type": "date", "date": {"start": "2024-12-31"}},
+            },
+        }
+        result = normalize("notion", raw)
+        assert result["due_date"] == "2024-12-31"
+
+
+class TestJiraStatusEdgeCases:
+    """Verify status mapping edge cases."""
+
+    def test_resolved_status_maps_to_done_not_cancelled(self):
+        raw = {
+            "key": "X-1",
+            "fields": {
+                "summary": "t",
+                "status": {"name": "Resolved", "statusCategory": {"key": "done"}},
+            },
+        }
+        result = normalize("jira", raw)
+        assert result["status"] == "done"
+
+    def test_null_status_field(self):
+        raw = {"key": "X-1", "fields": {"summary": "t", "status": None}}
+        result = normalize("jira", raw)
+        assert result["status"] == "todo"
+
+
 class TestStripHtml:
     def test_strips_basic_tags(self):
         assert _strip_html("<p>Hello</p>") == "Hello"

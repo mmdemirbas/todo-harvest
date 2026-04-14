@@ -94,6 +94,16 @@ class TestFetchAll:
         assert issues == []
 
     @respx.mock
+    def test_with_console_does_not_crash(self, jira_fixture):
+        """Verify that passing a Console object works (covers if console: branches)."""
+        from rich.console import Console
+        respx.get(SEARCH_URL).mock(
+            return_value=httpx.Response(200, json=jira_fixture)
+        )
+        issues = fetch_all(JIRA_CONFIG, console=Console(quiet=True))
+        assert len(issues) == 5
+
+    @respx.mock
     def test_auth_error_401(self):
         respx.get(SEARCH_URL).mock(
             return_value=httpx.Response(401, json={"message": "Unauthorized"})

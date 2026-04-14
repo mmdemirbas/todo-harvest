@@ -209,9 +209,13 @@ notion:
 
     def test_all_normalize_errors_returns_1(self, config_file, tmp_path):
         """When every item fails normalization, exit code is 1."""
-        bad_item = {"intentionally": "broken"}
-        with patch("src.main._fetch_source", return_value=[bad_item]):
-            with patch("src.normalizer.normalize", side_effect=Exception("bad")):
+        # Use _fetch_source mock returning items, then mock normalize at the
+        # deferred import site inside main() to force all items to fail
+        bad_items = [{"broken": True}, {"also_broken": True}]
+        with patch("src.main._fetch_source", return_value=bad_items):
+            # Patch at the module where normalize is defined — main() does
+            # a deferred 'from src.normalizer import normalize' so this works
+            with patch("src.normalizer.normalize", side_effect=ValueError("bad field")):
                 result = main(["--config", str(config_file), "--source", "jira"])
         assert result == 1
 
