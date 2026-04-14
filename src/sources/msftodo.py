@@ -146,12 +146,7 @@ def _fetch_lists(client: httpx.Client) -> list[dict]:
     return lists
 
 
-def _fetch_tasks_for_list(
-    client: httpx.Client,
-    list_id: str,
-    console: Console | None = None,
-    task_count: int = 0,
-) -> list[dict]:
+def _fetch_tasks_for_list(client: httpx.Client, list_id: str) -> list[dict]:
     """Fetch all tasks (including completed) from a single list."""
     tasks: list[dict] = []
     url: str | None = f"{GRAPH_BASE}/me/todo/lists/{list_id}/tasks"
@@ -160,11 +155,6 @@ def _fetch_tasks_for_list(
         resp = _request(client, "GET", url)
         data = resp.json()
         tasks.extend(data.get("value", []))
-        if console:
-            console.print(
-                f"  Microsoft To Do: fetched {task_count + len(tasks)} tasks...",
-                end="\r",
-            )
         url = data.get("@odata.nextLink")
 
     return tasks
@@ -191,13 +181,19 @@ def fetch_all(config: dict, console: Console | None = None) -> list[dict]:
         for todo_list in lists:
             list_id = todo_list["id"]
             list_name = todo_list.get("displayName", "Untitled")
-            tasks = _fetch_tasks_for_list(client, list_id, console, len(all_tasks))
+            tasks = _fetch_tasks_for_list(client, list_id)
 
             for task in tasks:
                 task["_list_id"] = list_id
                 task["_list_name"] = list_name
 
             all_tasks.extend(tasks)
+
+            if console:
+                console.print(
+                    f"  Microsoft To Do: fetched {len(all_tasks)} tasks...",
+                    end="\r",
+                )
 
     if console:
         console.print(f"  Microsoft To Do: fetched {len(all_tasks)} tasks total.")
