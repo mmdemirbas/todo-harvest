@@ -104,12 +104,12 @@ class TestMergePulledItems:
         assert len(local) == 1
         assert local[0]["local_id"] != ""
         # Verify mapping was created
-        lid = mapping.get_local_id("jira", "jira-PROJ-1")
+        lid = mapping.get_local_id("jira", "PROJ-1")
         assert lid is not None
 
     def test_existing_item_skipped_when_unchanged(self, mapping):
         lid = mapping.generate_local_id()
-        mapping.upsert(lid, "jira", "jira-PROJ-1",
+        mapping.upsert(lid, "jira", "PROJ-1",
                        source_updated_at="2024-01-01T00:00:00Z")
         mapping.mark_synced(lid, "jira")
 
@@ -122,7 +122,7 @@ class TestMergePulledItems:
 
     def test_existing_item_updated_when_source_changed(self, mapping):
         lid = mapping.generate_local_id()
-        mapping.upsert(lid, "jira", "jira-PROJ-1",
+        mapping.upsert(lid, "jira", "PROJ-1",
                        source_updated_at="2024-01-01T00:00:00Z")
 
         local_item = _make_item("jira", "PROJ-1", title="Old Title", local_id=lid,
@@ -136,7 +136,7 @@ class TestMergePulledItems:
 
     def test_local_wins_when_local_changed_more_recently(self, mapping):
         lid = mapping.generate_local_id()
-        mapping.upsert(lid, "jira", "jira-PROJ-1")
+        mapping.upsert(lid, "jira", "PROJ-1")
         # Set last_synced_at to a known time BEFORE the local edit
         conn = mapping._connect()
         conn.execute(
@@ -155,7 +155,7 @@ class TestMergePulledItems:
 
     def test_multiple_items_mixed(self, mapping):
         lid = mapping.generate_local_id()
-        mapping.upsert(lid, "jira", "jira-PROJ-1")
+        mapping.upsert(lid, "jira", "PROJ-1")
 
         local_items = [_make_item("jira", "PROJ-1", title="Existing", local_id=lid)]
         pulled_items = [
@@ -171,7 +171,7 @@ class TestMergePulledItems:
     def test_deleted_local_item_readded_on_pull(self, mapping):
         """If local item was removed but mapping exists, re-add it."""
         lid = mapping.generate_local_id()
-        mapping.upsert(lid, "jira", "jira-PROJ-1")
+        mapping.upsert(lid, "jira", "PROJ-1")
 
         pulled = [_make_item("jira", "PROJ-1", title="Restored")]
         local, stats = merge_pulled_items([], pulled, mapping, "jira")
@@ -182,7 +182,7 @@ class TestMergePulledItems:
     def test_conflict_counter_incremented(self, mapping):
         """When source and local differ on a field, conflicts stat counts it."""
         lid = mapping.generate_local_id()
-        mapping.upsert(lid, "jira", "jira-PROJ-1")
+        mapping.upsert(lid, "jira", "PROJ-1")
 
         local_item = _make_item("jira", "PROJ-1", title="Local Title", local_id=lid,
                                 status="todo", priority="low")

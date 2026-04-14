@@ -26,6 +26,7 @@ class NormalizedItem(TypedDict):
     created_date: str | None
     due_date: str | None
     updated_date: str | None
+    completed_date: str | None
     tags: list[str]
     url: str | None
     category: Category
@@ -58,6 +59,7 @@ CSV_COLUMNS: list[str] = [
     "created_date",
     "due_date",
     "updated_date",
+    "completed_date",
     "tags",
     "url",
     "category_id",

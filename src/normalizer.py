@@ -72,6 +72,11 @@ def normalize_vikunja(raw: dict, source_config: dict | None = None) -> dict:
         "type": "project",
     }
 
+    # Completed date (Vikunja sets done_at when 'done' toggles true)
+    done_at = raw.get("done_at")
+    if done_at == "0001-01-01T00:00:00Z":
+        done_at = None
+
     return {
         "id": f"vikunja-{task_id}",
         "local_id": "",  # assigned by merge_pulled_items
@@ -83,6 +88,7 @@ def normalize_vikunja(raw: dict, source_config: dict | None = None) -> dict:
         "created_date": raw.get("created"),
         "due_date": due_date,
         "updated_date": raw.get("updated"),
+        "completed_date": done_at,
         "tags": tags,
         "url": url,
         "category": category,
@@ -152,6 +158,9 @@ def normalize_jira(raw: dict, source_config: dict | None = None) -> dict:
     base = self_url.rsplit("/rest/", 1)[0] if "/rest/" in self_url else ""
     url = f"{base}/browse/{key}" if base else None
 
+    # Jira resolutiondate — set when the issue transitions to a 'done' category
+    completed_date = fields.get("resolutiondate")
+
     return {
         "id": f"jira-{key}",
         "local_id": "",  # assigned by merge_pulled_items
@@ -163,6 +172,7 @@ def normalize_jira(raw: dict, source_config: dict | None = None) -> dict:
         "created_date": fields.get("created"),
         "due_date": fields.get("duedate"),
         "updated_date": fields.get("updated"),
+        "completed_date": completed_date,
         "tags": tags,
         "url": url,
         "category": category,
@@ -340,6 +350,7 @@ def normalize_notion(raw: dict, source_config: dict | None = None) -> dict:
         "created_date": raw.get("created_time"),
         "due_date": due_date,
         "updated_date": raw.get("last_edited_time"),
+        "completed_date": None,  # Notion has no universal completed timestamp
         "tags": tags,
         "url": url,
         "category": category,
@@ -489,6 +500,11 @@ def normalize_mstodo(raw: dict, source_config: dict | None = None) -> dict:
         "type": "list",
     }
 
+    # Completion date
+    completed_date = raw.get("completedDateTime")
+    if isinstance(completed_date, dict):
+        completed_date = completed_date.get("dateTime")
+
     return {
         "id": f"mstodo-{task_id}",
         "local_id": "",
@@ -500,6 +516,7 @@ def normalize_mstodo(raw: dict, source_config: dict | None = None) -> dict:
         "created_date": created_date,
         "due_date": due_date,
         "updated_date": updated_date,
+        "completed_date": completed_date,
         "tags": tags,
         "url": None,
         "category": category,

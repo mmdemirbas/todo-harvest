@@ -676,6 +676,69 @@ class TestJiraStatusEdgeCases:
         assert result["status"] == "todo"
 
 
+class TestCompletedDate:
+    """completed_date is captured where the source provides it."""
+
+    def test_vikunja_done_at(self):
+        raw = {"id": 1, "title": "t", "done": True, "done_at": "2024-05-01T10:00:00Z"}
+        result = normalize("vikunja", raw)
+        assert result["completed_date"] == "2024-05-01T10:00:00Z"
+
+    def test_vikunja_zero_done_at_treated_as_null(self):
+        raw = {"id": 1, "title": "t", "done_at": "0001-01-01T00:00:00Z"}
+        result = normalize("vikunja", raw)
+        assert result["completed_date"] is None
+
+    def test_vikunja_missing_done_at(self):
+        raw = {"id": 1, "title": "t"}
+        result = normalize("vikunja", raw)
+        assert result["completed_date"] is None
+
+    def test_jira_resolutiondate(self):
+        raw = {
+            "key": "X-1",
+            "fields": {
+                "summary": "t",
+                "status": {"statusCategory": {"key": "done"}},
+                "resolutiondate": "2024-06-01T12:00:00.000+0000",
+            },
+        }
+        result = normalize("jira", raw)
+        assert result["completed_date"] == "2024-06-01T12:00:00.000+0000"
+
+    def test_jira_no_resolution(self):
+        raw = {"key": "X-1", "fields": {"summary": "t", "status": {"statusCategory": {"key": "new"}}}}
+        result = normalize("jira", raw)
+        assert result["completed_date"] is None
+
+    def test_mstodo_completed(self):
+        raw = {
+            "id": "t1", "status": "completed",
+            "completedDateTime": {"dateTime": "2024-04-10T09:00:00Z"},
+            "_list_id": "l", "_list_name": "L",
+        }
+        result = normalize("mstodo", raw)
+        assert result["completed_date"] == "2024-04-10T09:00:00Z"
+
+    def test_mstodo_completed_as_string(self):
+        raw = {
+            "id": "t1", "completedDateTime": "2024-04-10T09:00:00Z",
+            "_list_id": "l", "_list_name": "L",
+        }
+        result = normalize("mstodo", raw)
+        assert result["completed_date"] == "2024-04-10T09:00:00Z"
+
+    def test_notion_always_null(self):
+        raw = {
+            "id": "p", "_database_id": "db", "_database_title": "DB",
+            "properties": {
+                "Name": {"type": "title", "title": [{"plain_text": "t"}]},
+            },
+        }
+        result = normalize("notion", raw)
+        assert result["completed_date"] is None
+
+
 class TestConfigDrivenMappings:
     """Verify config-driven status_map, priority_map, and field_map."""
 
@@ -861,7 +924,7 @@ class TestUnifiedSchema:
 
     REQUIRED_KEYS = {
         "id", "local_id", "source", "title", "description", "status", "priority",
-        "created_date", "due_date", "updated_date", "tags", "url",
+        "created_date", "due_date", "updated_date", "completed_date", "tags", "url",
         "category", "raw",
     }
     CATEGORY_KEYS = {"id", "name", "type"}

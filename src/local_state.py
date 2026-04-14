@@ -63,8 +63,16 @@ def merge_pulled_items(
         if lid:
             local_by_id[lid] = item
 
+    source_prefix = f"{source}-"
     for pulled in pulled_items:
-        source_id = pulled["id"]
+        # Strip source prefix so mapping stores the raw external ID (e.g. "1",
+        # not "vikunja-1") — needed so push() can round-trip via the source API.
+        normalized_id = pulled["id"]
+        source_id = (
+            normalized_id[len(source_prefix):]
+            if normalized_id.startswith(source_prefix)
+            else normalized_id
+        )
         local_id = mapping.get_local_id(source, source_id)
 
         if local_id is None:
