@@ -12,6 +12,8 @@ mapping:
 vikunja:
   base_url: "http://localhost:3456"
   api_token: "YOUR_API_TOKEN"
+  # default_project_id: 1      # Vikunja project to create new tasks in
+  #                            # (required for cross-source push)
   # How to get: Vikunja UI → Settings → API Tokens → Create token
 
 jira:

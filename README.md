@@ -46,6 +46,7 @@ mapping:
 vikunja:
   base_url: "http://localhost:3456"
   api_token: "YOUR_API_TOKEN"
+  # default_project_id: 1      # required to push cross-source tasks into Vikunja
 
 jira:
   base_url: "https://YOUR_SUBDOMAIN.atlassian.net"
@@ -149,6 +150,7 @@ Every task is normalized to a common format regardless of source:
 | `created_date` | ISO8601 or null     | Creation timestamp                       |
 | `due_date`     | ISO8601 or null     | Due date                                 |
 | `updated_date` | ISO8601 or null     | Last modification timestamp              |
+| `completed_date` | ISO8601 or null   | When the task was marked done (MS To Do `completedDateTime`, Jira `resolutiondate`, Vikunja `done_at`; null for Notion) |
 | `tags`         | list of strings     | Labels, categories, list names           |
 | `url`          | string or null      | Link back to the original item           |
 | `category`     | object              | Organizational container (see below)     |
@@ -207,6 +209,8 @@ The `raw` field preserves the complete API response for each task, including sou
 |-------|-----|
 | "authentication failed" | Check your API token in config.yaml |
 | "access forbidden" | Check your token permissions |
+| "tasks skipped: no Vikunja mapping found" | Set `default_project_id` under `vikunja:` in config.yaml — new tasks from other sources are created there |
+| "Invalid model provided" on update | Ensure the task is a POST to `/api/v1/tasks/{numeric-id}` — an older bug stored prefixed IDs in mapping.db; `rm mapping.db` and re-pull fixes it |
 
 ### General
 
