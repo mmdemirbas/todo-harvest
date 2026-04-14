@@ -1,0 +1,16 @@
+{
+  "object": "database",
+  "id": "db-abc-123",
+  "title": [
+    {"type": "text", "text": {"content": "Task Board"}, "plain_text": "Task Board"}
+  ],
+  "properties": {
+    "Name": {"id": "title", "type": "title", "title": {}},
+    "Status": {"id": "status", "type": "select", "select": {}},
+    "Priority": {"id": "prio", "type": "select", "select": {}},
+    "Due Date": {"id": "due", "type": "date", "date": {}},
+    "Tags": {"id": "tags", "type": "multi_select", "multi_select": {}},
+    "Epic": {"id": "epic", "type": "select", "select": {}},
+    "URL": {"id": "url", "type": "url", "url": {}}
+  }
+}
