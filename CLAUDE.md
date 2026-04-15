@@ -1,5 +1,7 @@
 # todo-harvest
 
+> This file documents the codebase for AI coding assistants. Human contributors can ignore it — see `README.md` for usage and `CONTRIBUTING.md` for how to add a source.
+
 Personal CLI tool that syncs TODO items between Vikunja, Jira, Microsoft To Do, Notion, and Plane via a local state file.
 
 ## Architecture
