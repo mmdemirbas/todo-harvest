@@ -265,3 +265,7 @@ docker compose exec vikunja /app/vikunja/vikunja user reset-password 1 -d
 **Runtime:** httpx, PyYAML, msal, rich
 
 **Development:** pytest, pytest-cov, pytest-mock, respx
+
+## License
+
+MIT — see [LICENSE](LICENSE).
