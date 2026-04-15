@@ -1,0 +1,13 @@
+{
+  "total_count": 5,
+  "next_cursor": "",
+  "next_page_results": false,
+  "count": 5,
+  "results": [
+    {"id": "state-backlog", "name": "Backlog", "group": "backlog", "project": "proj-uuid-1"},
+    {"id": "state-todo", "name": "Todo", "group": "unstarted", "project": "proj-uuid-1"},
+    {"id": "state-inprogress", "name": "In Progress", "group": "started", "project": "proj-uuid-1"},
+    {"id": "state-done", "name": "Done", "group": "completed", "project": "proj-uuid-1"},
+    {"id": "state-cancelled", "name": "Cancelled", "group": "cancelled", "project": "proj-uuid-1"}
+  ]
+}

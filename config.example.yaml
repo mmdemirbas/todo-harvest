@@ -32,6 +32,19 @@ mstodo:
   tenant_id: "consumers"
   # How to get these: see README.md § Microsoft To Do credentials
 
+plane:
+  base_url: "https://plane.example.com"      # your self-hosted Plane URL
+  api_token: "YOUR_API_KEY"                  # workspace API key (X-API-Key)
+  workspace_slug: "YOUR_WORKSPACE_SLUG"      # from the URL after the domain
+  # project_ids:                 # optional allowlist; defaults to all projects
+  #   - "PROJECT_UUID_1"
+  # default_project_id: "PROJECT_UUID"   # required for cross-source push
+  # status_map:                  # Plane state name → unified status
+  #   "Needs Review": "in_progress"
+  # priority_map:                # Plane priority → unified priority
+  #   "urgent": "critical"
+  # How to get: Plane → Workspace Settings → API Tokens → Add API Token
+
 notion:
   token: "YOUR_INTEGRATION_SECRET"
   database_ids:

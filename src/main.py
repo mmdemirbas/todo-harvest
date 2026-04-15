@@ -29,7 +29,7 @@ INSPECT_TARGETS = ("projects", "stats", "fields")
 #   values/services → magenta
 _TOP_LEVEL_HELP = """[bold]Usage:[/] [bold green]todo[/] [bold]\\[--config PATH][/] [yellow]<command>[/] [yellow]\\[args...][/]
 
-Collect, sync, and inspect TODO items across Vikunja, Jira, MS To Do, and Notion.
+Collect, sync, and inspect TODO items across Vikunja, Jira, MS To Do, Notion, and Plane.
 
 [bold cyan]Sync commands[/] [dim](network I/O)[/]:
   [bold green]pull[/]    [yellow]\\[services...][/]       Fetch tasks from services into local state
@@ -47,7 +47,7 @@ Collect, sync, and inspect TODO items across Vikunja, Jira, MS To Do, and Notion
   [bold]--config PATH[/]            Path to [magenta]config.yaml[/] [dim](default: ./config.yaml)[/]
   [bold]-h, --help[/]               Show this message
 
-[dim]Services:[/] [magenta]vikunja[/], [magenta]jira[/], [magenta]mstodo[/], [magenta]notion[/]
+[dim]Services:[/] [magenta]vikunja[/], [magenta]jira[/], [magenta]mstodo[/], [magenta]notion[/], [magenta]plane[/]
 [dim]Run [/][bold green]'todo help <command>'[/][dim] for command-specific arguments and examples.[/]
 """
 
@@ -63,7 +63,7 @@ def _sync_cmd_help(cmd: str, verb: str) -> str:
 
 [bold cyan]Arguments[/]:
   [yellow]service[/]              Service(s) to [bold green]{cmd}[/]. Omit to use every configured service.
-                       [dim]Choices: [/][magenta]vikunja[/], [magenta]jira[/], [magenta]mstodo[/], [magenta]notion[/]
+                       [dim]Choices: [/][magenta]vikunja[/], [magenta]jira[/], [magenta]mstodo[/], [magenta]notion[/], [magenta]plane[/]
 
 [bold cyan]Options[/]:
   [bold]-h, --help[/]           Show this message
@@ -105,7 +105,7 @@ Inspect local data without hitting any service.
 
 [bold cyan]Arguments[/]:
   [yellow]source[/]              [dim]Optional.[/] Filter to one source.
-                       [dim]Choices: [/][magenta]vikunja[/], [magenta]jira[/], [magenta]mstodo[/], [magenta]notion[/]
+                       [dim]Choices: [/][magenta]vikunja[/], [magenta]jira[/], [magenta]mstodo[/], [magenta]notion[/], [magenta]plane[/]
 
 [bold cyan]Examples[/]:
   [bold green]todo inspect projects[/]                      [dim]# all sources[/]

@@ -1,0 +1,24 @@
+{
+  "grouped_by": null,
+  "total_count": 2,
+  "next_cursor": "",
+  "prev_cursor": "",
+  "next_page_results": false,
+  "prev_page_results": false,
+  "count": 2,
+  "total_pages": 1,
+  "results": [
+    {
+      "id": "proj-uuid-1",
+      "name": "Backend",
+      "identifier": "BE",
+      "workspace": "ws-uuid-1"
+    },
+    {
+      "id": "proj-uuid-2",
+      "name": "Frontend",
+      "identifier": "FE",
+      "workspace": "ws-uuid-1"
+    }
+  ]
+}

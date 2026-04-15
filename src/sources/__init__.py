@@ -105,6 +105,13 @@ REGISTRY: dict[str, SourceDef] = {
         required_keys=["token", "database_ids"],
         push_supported=False,
     ),
+    "plane": SourceDef(
+        module_path="src.sources.plane",
+        normalize_module="src.normalizer",
+        normalize_fn="normalize_plane",
+        required_keys=["base_url", "api_token", "workspace_slug"],
+        push_supported=True,
+    ),
 }
 
 SOURCE_NAMES: tuple[str, ...] = tuple(REGISTRY.keys())

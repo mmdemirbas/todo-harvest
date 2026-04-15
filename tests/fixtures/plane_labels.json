@@ -1,0 +1,10 @@
+{
+  "total_count": 2,
+  "next_cursor": "",
+  "next_page_results": false,
+  "count": 2,
+  "results": [
+    {"id": "label-bug", "name": "bug", "project": "proj-uuid-1"},
+    {"id": "label-ci", "name": "ci", "project": "proj-uuid-1"}
+  ]
+}

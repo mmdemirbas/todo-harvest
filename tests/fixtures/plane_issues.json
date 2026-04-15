@@ -1,0 +1,53 @@
+{
+  "total_count": 3,
+  "next_cursor": "",
+  "next_page_results": false,
+  "count": 3,
+  "results": [
+    {
+      "id": "issue-uuid-1",
+      "sequence_id": 42,
+      "name": "Wire up CI",
+      "description_html": "<p>Add GitHub Actions workflow.</p>",
+      "priority": "high",
+      "state": "state-inprogress",
+      "labels": ["label-ci"],
+      "target_date": "2026-05-01",
+      "start_date": null,
+      "created_at": "2026-04-01T10:00:00Z",
+      "updated_at": "2026-04-10T12:00:00Z",
+      "completed_at": null,
+      "project": "proj-uuid-1"
+    },
+    {
+      "id": "issue-uuid-2",
+      "sequence_id": 43,
+      "name": "Fix login bug",
+      "description_html": "",
+      "priority": "urgent",
+      "state": "state-done",
+      "labels": ["label-bug"],
+      "target_date": null,
+      "start_date": null,
+      "created_at": "2026-03-15T09:00:00Z",
+      "updated_at": "2026-04-05T18:30:00Z",
+      "completed_at": "2026-04-05T18:30:00Z",
+      "project": "proj-uuid-1"
+    },
+    {
+      "id": "issue-uuid-3",
+      "sequence_id": 44,
+      "name": "Plain task",
+      "description_html": null,
+      "priority": "none",
+      "state": "state-backlog",
+      "labels": [],
+      "target_date": null,
+      "start_date": null,
+      "created_at": "2026-04-11T08:00:00Z",
+      "updated_at": "2026-04-11T08:00:00Z",
+      "completed_at": null,
+      "project": "proj-uuid-1"
+    }
+  ]
+}

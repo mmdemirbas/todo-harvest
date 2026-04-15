@@ -522,3 +522,91 @@ def normalize_mstodo(raw: dict, source_config: dict | None = None) -> dict:
         "category": category,
         "raw": raw,
     }
+
+
+# ---------------------------------------------------------------------------
+# Plane (self-hosted)
+# ---------------------------------------------------------------------------
+
+_PLANE_STATE_GROUP_MAP = {
+    "backlog": "todo",
+    "unstarted": "todo",
+    "started": "in_progress",
+    "completed": "done",
+    "cancelled": "cancelled",
+}
+
+_PLANE_PRIORITY_MAP = {
+    "urgent": "critical",
+    "high": "high",
+    "medium": "medium",
+    "low": "low",
+    "none": "none",
+}
+
+
+def normalize_plane(raw: dict, source_config: dict | None = None) -> dict:
+    cfg = source_config or {}
+    custom_status_map = cfg.get("status_map", {})
+    custom_priority_map = cfg.get("priority_map", {})
+
+    issue_id = raw.get("id", "")
+    project_id = raw.get("_project_id", "")
+    sequence_id = raw.get("sequence_id")
+
+    # Status — state_name check first (user-visible), then fall back to group
+    state_name = raw.get("_state_name") or ""
+    state_group = (raw.get("_state_group") or "").lower()
+    if state_name in custom_status_map:
+        status = custom_status_map[state_name]
+    else:
+        status = _PLANE_STATE_GROUP_MAP.get(state_group, "todo")
+
+    # Priority
+    priority_raw = (raw.get("priority") or "none").lower()
+    if priority_raw in custom_priority_map:
+        priority = custom_priority_map[priority_raw]
+    else:
+        priority = _PLANE_PRIORITY_MAP.get(priority_raw, "none")
+
+    # Description — strip HTML from description_html (fall back to plain)
+    desc_html = raw.get("description_html")
+    description = _strip_html(desc_html) if desc_html else raw.get("description")
+    if description is not None and not description.strip():
+        description = None
+
+    tags = list(raw.get("_label_names") or [])
+
+    url = None
+    base_url = raw.get("_base_url")
+    workspace = raw.get("_workspace_slug")
+    if base_url and workspace and project_id and issue_id:
+        url = (
+            f"{base_url}/{workspace}/projects/{project_id}/issues/{issue_id}"
+        )
+
+    category = {
+        "id": str(project_id) if project_id else None,
+        "name": raw.get("_project_name"),
+        "type": "project",
+    }
+
+    id_suffix = f"{project_id}-{sequence_id}" if sequence_id is not None else str(issue_id)
+
+    return {
+        "id": f"plane-{id_suffix}",
+        "local_id": "",
+        "source": "plane",
+        "title": raw.get("name", ""),
+        "description": description,
+        "status": status,
+        "priority": priority,
+        "created_date": raw.get("created_at"),
+        "due_date": raw.get("target_date"),
+        "updated_date": raw.get("updated_at"),
+        "completed_date": raw.get("completed_at"),
+        "tags": tags,
+        "url": url,
+        "category": category,
+        "raw": raw,
+    }

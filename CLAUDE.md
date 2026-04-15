@@ -1,16 +1,16 @@
 # todo-harvest
 
-Personal CLI tool that syncs TODO items between Vikunja, Jira, Microsoft To Do, and Notion via a local state file.
+Personal CLI tool that syncs TODO items between Vikunja, Jira, Microsoft To Do, Notion, and Plane via a local state file.
 
 ## Architecture
 
 ```
-                      LOCAL STATE
-                 (todos.json / mapping.db)
-                /       |        |        \
-           pull/push  pull/push  pull/push  pull-only
-              /         |          |          \
-          Vikunja      Jira     MS Todo      Notion
+                          LOCAL STATE
+                     (todos.json / mapping.db)
+                /       |        |        |        \
+           pull/push  pull/push  pull/push  pull-only  pull/push
+              /         |          |          |          \
+          Vikunja      Jira     MS Todo    Notion       Plane
 ```
 
 ```
@@ -22,6 +22,7 @@ src/
     jira.py        — Jira REST API v3 client (pull + push stub)
     mstodo.py     — MS Graph API + MSAL device code auth (pull + push stub)
     notion.py      — Notion API v1 client (pull only)
+    plane.py       — Plane self-hosted REST API v1 (pull + push)
   schema.py        — TypedDict definitions (NormalizedItem, Category, PushResult, MergeStats)
   normalizer.py    — Pure functions: raw payload → unified schema
   mapping.py       — SQLite sync_map + sync_log, conflict resolution
@@ -107,6 +108,7 @@ Normalizers accept an optional `source_config` dict from config.yaml. Supported 
 
 - **Jira:** `jql` (search query), `status_map`, `priority_map`
 - **Notion:** `field_map` (column name → unified field), `status_map`, `priority_map`
+- **Plane:** `status_map` (state name → unified status), `priority_map` (Plane priority → unified priority)
 - **Vikunja/MS To Do:** `source_config` accepted but not currently used (hardcoded maps suffice)
 
 Config maps override built-in maps; unmapped values fall through to built-in logic.
@@ -117,6 +119,7 @@ Config maps override built-in maps; unmapped values fall through to built-in log
 - **Vikunja:** `GET /api/v1/tasks` (offset pagination)
 - **MS To Do:** MS Graph v1.0, `$expand=checklistItems`
 - **Notion:** API version `2022-06-28`
+- **Plane:** self-hosted `/api/v1/`, `X-API-Key` header, cursor pagination (`next_cursor`/`next_page_results`)
 
 ## Known limitations (deferred by design)
 
@@ -125,3 +128,4 @@ Config maps override built-in maps; unmapped values fall through to built-in log
 - Push not yet implemented for Jira and MS To Do (stubs raise NotImplementedError)
 - Notion is pull-only by design
 - Notion page content (blocks) not fetched — only database properties (would require N API calls for N pages)
+- Plane push writes only title, description_html, priority, and target_date. State (status) and labels are not synced — new issues land in the project's default state, and updates never change state or labels
