@@ -9,6 +9,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
+from src import __version__
 from src.config import ConfigError, load_config, enabled_sources, validate_source, SOURCES
 from src.sources import REGISTRY
 from src.sources._http import SourceAuthError, SourceFetchError
@@ -45,6 +46,7 @@ Collect, sync, and inspect TODO items across Vikunja, Jira, MS To Do, Notion, an
 
 [bold cyan]Global options[/]:
   [bold]--config PATH[/]            Path to [magenta]config.yaml[/] [dim](default: ./config.yaml)[/]
+  [bold]-V, --version[/]            Show version and exit
   [bold]-h, --help[/]               Show this message
 
 [dim]Services:[/] [magenta]vikunja[/], [magenta]jira[/], [magenta]mstodo[/], [magenta]notion[/], [magenta]plane[/]
@@ -158,6 +160,10 @@ class _ColoredSubParser(argparse.ArgumentParser):
 def build_parser() -> argparse.ArgumentParser:
     parser = _TodoParser(prog="todo", add_help=False)
     parser.add_argument("-h", "--help", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "-V", "--version", action="version",
+        version=f"todo-harvest {__version__}",
+    )
     parser.add_argument(
         "--config", type=str, default=None,
         help="Path to config.yaml. Default: config.yaml in project root.",
