@@ -1,6 +1,6 @@
 # todo-harvest
 
-Sync TODO items between Vikunja, Jira, Microsoft To Do, and Notion via a local state file. Bidirectional for Vikunja; pull-only for Notion.
+Sync TODO items between Vikunja, Jira, Microsoft To Do, Notion, and Plane via a local state file. Bidirectional for Vikunja and Plane; pull-only for Jira, Microsoft To Do, and Notion (push is not yet implemented for Jira/MS To Do; Notion is pull-only by design).
 
 ## Quick start
 
@@ -11,7 +11,7 @@ cp config.example.yaml config.yaml
 ./todo pull
 ```
 
-The `todo` script creates a virtual environment on first run and installs all dependencies automatically.
+The `todo` script (bash) creates a virtual environment on first run and installs all dependencies automatically. On Windows, use `harvest.ps1` from PowerShell — same arguments, same behavior.
 
 ### Usage
 
@@ -130,6 +130,17 @@ On first run, the tool prints a device code and URL. Open the URL in your browse
 5. Set `jira.email` to your Atlassian account email
 6. Set `jira.base_url` to your Jira instance URL (e.g. `https://yourname.atlassian.net`)
 
+## Plane credentials
+
+For self-hosted [Plane](https://plane.so) installations.
+
+1. Log in to your Plane workspace
+2. Go to **Workspace Settings** -> **API Tokens** -> **Add API Token**
+3. Copy the token -> `config.yaml` -> `plane.api_token`
+4. Set `plane.base_url` to your Plane instance URL (e.g. `https://plane.example.com`)
+5. Set `plane.workspace_slug` to your workspace slug (from the URL after the domain)
+6. To push cross-source tasks into Plane, set `plane.default_project_id` to a project UUID. See `./todo inspect projects plane`.
+
 ## Notion credentials
 
 1. Go to [Notion Integrations](https://www.notion.so/my-integrations)
@@ -178,15 +189,19 @@ The `raw` field preserves the complete API response for each task, including sou
 
 ### Bidirectional field support
 
-| Field       | vikunja | jira       | mstodo | notion    |
-|-------------|---------|------------|---------|-----------|
-| title       | rw      | rw         | rw      | pull only |
-| description | rw      | rw         | rw      | pull only |
-| status      | rw      | rw         | rw      | pull only |
-| priority    | rw      | rw         | rw      | pull only |
-| due_date    | rw      | rw         | rw      | pull only |
-| tags/labels | rw      | rw         | rw      | pull only |
-| category    | rw      | pull only  | pull only | pull only |
+Legend: `rw` = pull and push wired; `pull` = pull only (push not implemented or not supported by this source).
+
+| Field       | vikunja | jira | mstodo | notion | plane |
+|-------------|---------|------|--------|--------|-------|
+| title       | rw      | pull | pull   | pull   | rw    |
+| description | rw      | pull | pull   | pull   | rw    |
+| status      | rw      | pull | pull   | pull   | pull  |
+| priority    | rw      | pull | pull   | pull   | rw    |
+| due_date    | rw      | pull | pull   | pull   | rw    |
+| tags/labels | rw      | pull | pull   | pull   | pull  |
+| category    | rw      | pull | pull   | pull   | pull  |
+
+Push is not yet implemented for Jira and Microsoft To Do (the CLI will raise an error if you try). Notion is pull-only by design. For Plane, push writes title, description, priority, and due date; status and labels are not synced.
 
 ## Troubleshooting
 
