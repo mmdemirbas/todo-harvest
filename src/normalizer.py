@@ -181,14 +181,28 @@ def normalize_jira(raw: dict, source_config: dict | None = None) -> dict:
 
 
 def _extract_adf_text(doc: dict | None) -> str | None:
-    """Extract plain text from an Atlassian Document Format structure."""
+    """Extract plain text from an Atlassian Document Format structure.
+
+    ADF nests arbitrarily: paragraphs, bullet lists (3 levels), tables (5),
+    panels, blockquotes, headings. Walk recursively so nothing past the first
+    inline level is dropped.
+    """
     if not doc or not isinstance(doc, dict):
         return None
-    parts = []
-    for block in doc.get("content", []):
-        for inline in block.get("content", []):
-            if inline.get("type") == "text":
-                parts.append(inline.get("text", ""))
+    parts: list[str] = []
+
+    def walk(node: object) -> None:
+        if not isinstance(node, dict):
+            return
+        if node.get("type") == "text":
+            text = node.get("text")
+            if text:
+                parts.append(text)
+            return
+        for child in node.get("content") or ():
+            walk(child)
+
+    walk(doc)
     return " ".join(parts) if parts else None
 
 

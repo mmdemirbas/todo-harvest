@@ -216,6 +216,60 @@ class TestExtractAdfText:
         ]}]}
         assert _extract_adf_text(adf) is None
 
+    def test_bullet_list_three_levels_deep(self):
+        """ADF bulletList -> listItem -> paragraph -> text. Old 2-level walker dropped this."""
+        adf = {"type": "doc", "version": 1, "content": [{
+            "type": "bulletList",
+            "content": [{
+                "type": "listItem",
+                "content": [{
+                    "type": "paragraph",
+                    "content": [{"type": "text", "text": "Item one"}],
+                }],
+            }],
+        }]}
+        assert _extract_adf_text(adf) == "Item one"
+
+    def test_table_five_levels_deep(self):
+        """table -> tableRow -> tableCell -> paragraph -> text."""
+        adf = {"type": "doc", "version": 1, "content": [{
+            "type": "table",
+            "content": [{
+                "type": "tableRow",
+                "content": [{
+                    "type": "tableCell",
+                    "content": [{
+                        "type": "paragraph",
+                        "content": [{"type": "text", "text": "Cell text"}],
+                    }],
+                }],
+            }],
+        }]}
+        assert _extract_adf_text(adf) == "Cell text"
+
+    def test_panel_with_paragraphs(self):
+        adf = {"type": "doc", "version": 1, "content": [{
+            "type": "panel",
+            "attrs": {"panelType": "info"},
+            "content": [
+                {"type": "paragraph", "content": [{"type": "text", "text": "Note:"}]},
+                {"type": "paragraph", "content": [{"type": "text", "text": "details."}]},
+            ],
+        }]}
+        assert _extract_adf_text(adf) == "Note: details."
+
+    def test_mixed_top_level_blocks(self):
+        adf = {"type": "doc", "version": 1, "content": [
+            {"type": "heading", "content": [{"type": "text", "text": "H1"}]},
+            {"type": "paragraph", "content": [{"type": "text", "text": "p1"}]},
+            {"type": "bulletList", "content": [{
+                "type": "listItem", "content": [{
+                    "type": "paragraph", "content": [{"type": "text", "text": "li"}],
+                }],
+            }]},
+        ]}
+        assert _extract_adf_text(adf) == "H1 p1 li"
+
 
 class TestJiraCategory:
     def test_epic_parent(self):
