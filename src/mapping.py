@@ -6,6 +6,7 @@ conflict resolution, and a sync log for auditability.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -15,9 +16,40 @@ from typing import Any
 
 DEFAULT_DB_PATH = Path("mapping.db")
 
+# ±HHMM (no colon) — Jira uses this; fromisoformat below 3.11 rejects it
+_TZ_NO_COLON_RE = re.compile(r"([+-])(\d{2})(\d{2})$")
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_iso_ts(ts: str | None) -> datetime | None:
+    """Parse an ISO 8601 timestamp into a tz-aware datetime; assume UTC if naive.
+
+    Tolerates trailing 'Z', ±HHMM offsets without a colon, and >6-digit
+    fractional seconds (MS Graph emits 7). Returns None on empty or
+    unparseable input — callers fall through to source-wins.
+    """
+    if not ts or not isinstance(ts, str):
+        return None
+    s = ts
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    s = _TZ_NO_COLON_RE.sub(r"\1\2:\3", s)
+    if "." in s:
+        head, _, tail = s.partition(".")
+        tz_idx = next((i for i, c in enumerate(tail) if c in "+-"), len(tail))
+        frac = tail[:tz_idx][:6]
+        rest = tail[tz_idx:]
+        s = f"{head}.{frac}{rest}"
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 class SyncMapping:
@@ -164,18 +196,20 @@ class SyncMapping:
         if local_value == source_value:
             return local_value, "local"
 
-        # If we have timestamps, use them
-        if last_synced_at and local_updated_at and source_updated_at:
-            local_changed = local_updated_at > last_synced_at
-            source_changed = source_updated_at > last_synced_at
+        last_dt = _parse_iso_ts(last_synced_at)
+        local_dt = _parse_iso_ts(local_updated_at)
+        source_dt = _parse_iso_ts(source_updated_at)
+        if last_dt and local_dt and source_dt:
+            local_changed = local_dt > last_dt
+            source_changed = source_dt > last_dt
             if local_changed and not source_changed:
                 return local_value, "local"
             if source_changed and not local_changed:
                 return source_value, "source"
-            # Both changed — source wins (prefer external data on pull)
+            # Both changed (or neither) — source wins
             return source_value, "source"
 
-        # No timestamps — source wins
+        # Missing or unparseable timestamps — source wins
         return source_value, "source"
 
     # -- Sync log ------------------------------------------------------------

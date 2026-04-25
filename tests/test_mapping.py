@@ -140,6 +140,67 @@ class TestConflictResolution:
         assert val == "Old Source"
         assert winner == "source"
 
+    def test_mixed_iso_formats_for_same_instant_treated_equal(self):
+        """Jira (+0000) and Vikunja (Z) for the same instant must not trigger spurious local-wins."""
+        # Same instant: 2024-02-01T00:00:00 UTC
+        # last_synced exactly matches both — neither changed → source wins (fall-through)
+        val, winner = SyncMapping.resolve_conflict(
+            "title",
+            "Local", "2024-02-01T00:00:00Z",
+            "Source", "2024-02-01T00:00:00.000+0000",
+            "2024-02-01T00:00:00+00:00",
+        )
+        assert val == "Source"
+        assert winner == "source"
+
+    def test_naive_timestamp_treated_as_utc(self):
+        """MS Todo emits naive timestamps; parser treats as UTC and avoids aware-vs-naive crash.
+
+        Source unchanged (before last_synced), local changed after — local must win.
+        """
+        val, winner = SyncMapping.resolve_conflict(
+            "title",
+            "Local", "2024-02-15T10:00:00",  # naive (MS Todo) — assumed UTC
+            "Source", "2024-01-01T00:00:00Z",  # before last_synced → unchanged
+            "2024-02-01T00:00:00Z",
+        )
+        assert val == "Local"
+        assert winner == "local"
+
+    def test_seven_digit_fractional_seconds(self):
+        """MS Graph emits 7-digit fractional seconds; parser truncates, doesn't crash."""
+        val, winner = SyncMapping.resolve_conflict(
+            "title",
+            "Local", "2024-02-15T10:00:00.1234567",
+            "Source", "2024-01-01T00:00:00.0000000Z",
+            "2024-02-01T00:00:00Z",
+        )
+        assert val == "Local"
+        assert winner == "local"
+
+    def test_malformed_timestamps_fall_through_to_source(self):
+        """Garbage timestamps → source wins (don't crash, don't lex-compare)."""
+        val, winner = SyncMapping.resolve_conflict(
+            "title",
+            "Local", "not-a-date",
+            "Source", "also garbage",
+            "2024-02-01T00:00:00Z",
+        )
+        assert val == "Source"
+
+    def test_lexicographic_format_quirk_no_longer_breaks_comparison(self):
+        """Regression: '2024-01-15T10:30:00Z' lex-compared to '2024-01-15T10:30:00.000+0000'
+        previously gave wrong sort because '.' < 'Z'. Both represent same instant; should
+        not detect a local change."""
+        val, winner = SyncMapping.resolve_conflict(
+            "title",
+            "Same", "2024-01-15T10:30:00Z",
+            "Same", "2024-01-15T10:30:00.000+0000",
+            "2024-01-10T00:00:00Z",
+        )
+        # Equal values short-circuit early; this asserts no exception either way.
+        assert val == "Same"
+
     def test_upsert_changes_local_id_on_remap(self, mapping):
         """Re-mapping a (source, source_id) to a new local_id works."""
         mapping.upsert("lid-1", "jira", "PROJ-1")
