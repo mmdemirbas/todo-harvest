@@ -1,6 +1,6 @@
 # todo-harvest — review and fix log
 
-12 commits on top of `1e6592d`. Test suite: **504 → 533 passing** (29 new). All hooks clean. Branch: `main`.
+14 commits on top of `1e6592d`. Test suite: **504 → 541 passing** (37 new). All hooks clean. Branch: `main`.
 
 ## Fixes shipped (priority order)
 
@@ -45,17 +45,24 @@ The old `<[^>]+>` regex broke on attributes containing `>` (`<a href="x>y">link<
 **11. Batch SQLite commits in merge** — `7eb5fd6`
 Per-operation commits meant 2-3 fsyncs per item. `SyncMapping.transaction()` defers commits inside a block to a single commit on exit, rolls back the entire batch on exception, supports re-entry. Mid-pull crash now leaves mapping.db consistent (atomic at the mapping layer).
 
+### Vikunja (verified against v2.3)
+
+**12. Labels actually sync; payload no longer carries dead fields** — `<latest>`
+End-to-end probe confirmed Vikunja silently ignores `labels` on task POST/PUT — the existing `payload["labels"]=...` did nothing. Local tag changes never propagated. Also confirmed `done_at` is server-managed (auto-stamped on `done=true`).
+
+Dropped `labels` and `done_at` from `_to_vikunja_payload`. Added `_fetch_all_labels` (workspace index, paginated), `_ensure_label` (cache + create-if-missing), and `_sync_task_labels` (diff current vs desired, attach via `PUT /tasks/{id}/labels`, detach via `DELETE`). Push pre-fetches the label index once.
+
 ### Packaging
 
-**12. `pip install .` works** — `7baeaee`
+**13. `pip install .` works** — `7baeaee`
 Pinned `[tool.setuptools].packages = ["src", "src.sources"]` so setuptools doesn't try to auto-discover (the unusual `src/` layout would otherwise fail). Added `[project.scripts] todo-harvest = "src.main:main"` console script and `[build-system]` requires.
 
 ## Findings deferred (not actioned)
 
-- **Vikunja push label/done_at semantics** — without an API instance to verify Vikunja's update merge-vs-replace behavior, a "fix" could regress working behavior. The deep review flagged it as speculative.
-- **Plane URL uses UUID, not sequence_id** — possibly wrong, but Plane's URL format depends on version. Needs a real Plane instance to verify.
+- **Plane URL uses UUID, not sequence_id** — possibly wrong, but Plane's URL format depends on version. Needs a real Plane instance to verify. Deferred per user (Plane not priority).
 - **`json.dump(..., default=str)` silent type coercion** — only affects `raw` field and only if a source returns non-JSON-serializable types. Currently no source does.
 - **`_merge_fields` uses item-level timestamp for all fields** — design vs. code mismatch. Documented in CLAUDE.md as "field-by-field" but is actually item-granularity. Real fix requires per-field timestamp columns in mapping.db.
+- **Vikunja: no "cancelled" state** — Vikunja v2.3 only has `done` boolean. Pulled cancelled tasks don't exist; pushed cancelled tasks become `done=true` (one-way). Documented in `_VIKUNJA_STATUS_TO_BOOL` already.
 
 ## Healthy (verified clean)
 
