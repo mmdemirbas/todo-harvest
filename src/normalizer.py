@@ -5,15 +5,54 @@ All functions here are pure — no I/O, no side effects.
 
 from __future__ import annotations
 
-import re
+from html.parser import HTMLParser
 
-_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+class _HTMLTextExtractor(HTMLParser):
+    """Strip HTML tags and decode entities, dropping script/style contents."""
+
+    _SKIP_TAGS = {"script", "style"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        if tag in self._SKIP_TAGS:
+            self._skip_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._SKIP_TAGS and self._skip_depth > 0:
+            self._skip_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth == 0:
+            self._parts.append(data)
+
+    def text(self) -> str:
+        return "".join(self._parts)
 
 
 def _strip_html(text: str) -> str:
-    """Remove HTML tags, collapse whitespace."""
-    cleaned = _HTML_TAG_RE.sub("", text)
-    return " ".join(cleaned.split())
+    """Strip HTML tags and entities, then collapse whitespace.
+
+    Uses html.parser, not a regex — `<a href="a>b">x</a>` and entities like
+    `&amp;` round-trip cleanly. <script>/<style> contents are dropped.
+    Returns "" for empty/non-string input rather than raising.
+    """
+    if not text or not isinstance(text, str):
+        return ""
+    parser = _HTMLTextExtractor()
+    try:
+        parser.feed(text)
+        parser.close()
+    except Exception:
+        # html.parser is lenient — only ever raises on truly broken inputs.
+        # Fall back to the original text minus everything between < and >.
+        import re
+        return " ".join(re.sub(r"<[^>]*>", "", text).split())
+    return " ".join(parser.text().split())
 
 
 def normalize(source: str, raw: dict, source_config: dict | None = None) -> dict:

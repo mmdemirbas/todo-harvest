@@ -980,6 +980,26 @@ class TestStripHtml:
     def test_br_with_space(self):
         assert _strip_html("line1 <br/> line2") == "line1 line2"
 
+    def test_attribute_value_containing_gt(self):
+        """Old regex matched <...> greedily; '>' inside attribute closed early.
+        '<a href="x>y">link</a>' used to leave 'y">link' as residual text."""
+        assert _strip_html('<a href="x>y">link</a>') == "link"
+
+    def test_html_entities_decoded(self):
+        assert _strip_html("<p>Tom &amp; Jerry</p>") == "Tom & Jerry"
+        assert _strip_html("<p>1 &lt; 2 &gt; 0</p>") == "1 < 2 > 0"
+        assert _strip_html("<p>&nbsp;trim&nbsp;</p>") == "trim"
+
+    def test_script_and_style_contents_dropped(self):
+        assert _strip_html("<p>visible</p><script>alert(1)</script>") == "visible"
+        assert _strip_html("<style>p{color:red}</style><p>text</p>") == "text"
+
+    def test_none_input_returns_empty(self):
+        assert _strip_html(None) == ""  # type: ignore[arg-type]
+
+    def test_non_string_input_returns_empty(self):
+        assert _strip_html(123) == ""  # type: ignore[arg-type]
+
 
 class TestUnifiedSchema:
     """Verify that all normalizers produce the same schema shape."""
