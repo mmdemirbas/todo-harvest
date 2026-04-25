@@ -17,13 +17,18 @@ or permitted in the test suite.
 ## Adding a new source
 
 1. Create `src/sources/newsource.py` exposing `pull(config, console)` and
-   `push(config, tasks, console)`. Raise `SourceAuthError` /
+   `push(config, tasks, console, mapping=None)`. Raise `SourceAuthError` /
    `SourceFetchError` (from `src/sources/_http.py`) for expected failures.
 2. Add a `normalize_newsource()` entry to `src/normalizer.py` that maps the
-   source payload into the unified schema (see `src/schema.py`).
+   source payload into the unified schema (see `src/schema.py`). Sort tags
+   so order differences don't trigger spurious conflicts on pull.
 3. Add one row to `REGISTRY` in `src/sources/__init__.py`. That is the
    single source of truth for source name, config key, and push support.
-4. Add fixture JSON under `tests/fixtures/` and tests under `tests/` using
+4. (Optional) If your source needs a one-shot mapping migration on each pull
+   (e.g. legacy id format), add a module-level
+   `migrate_legacy_mappings(mapping, raw_items)` — `SourceDef.migrate` will
+   discover and call it.
+5. Add fixture JSON under `tests/fixtures/` and tests under `tests/` using
    the same structure as existing sources.
 
 ## Style
