@@ -38,6 +38,7 @@ class SourceDef:
         self.push_supported = push_supported
         self._module = None
         self._norm_module = None
+        self._push_accepts_mapping: bool | None = None
 
     def _load(self):
         if self._module is None:
@@ -63,11 +64,22 @@ class SourceDef:
         mapping: Any = None,
     ) -> dict:
         mod = self._load()
-        try:
-            return mod.push(config, tasks, console, mapping=mapping)
-        except TypeError:
-            # Backwards-compat: source's push() doesn't accept mapping
-            return mod.push(config, tasks, console)
+        fn = mod.push
+        if self._push_accepts_mapping is None:
+            # Inspect once and cache. Catching TypeError on every call would
+            # also mask real TypeError bugs raised inside push().
+            import inspect
+            try:
+                params = inspect.signature(fn).parameters
+                self._push_accepts_mapping = (
+                    "mapping" in params
+                    or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+                )
+            except (TypeError, ValueError):
+                self._push_accepts_mapping = False
+        if self._push_accepts_mapping:
+            return fn(config, tasks, console, mapping=mapping)
+        return fn(config, tasks, console)
 
     def normalize(self, raw: dict, source_config: dict | None = None) -> NormalizedItem:
         mod = self._load_normalizer()
