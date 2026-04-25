@@ -34,6 +34,9 @@ Homepage = "https://github.com/mmdemirbas/todo-harvest"
 Repository = "https://github.com/mmdemirbas/todo-harvest"
 Issues = "https://github.com/mmdemirbas/todo-harvest/issues"
 
+[project.scripts]
+todo-harvest = "src.main:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.2",
@@ -41,6 +44,17 @@ dev = [
     "pytest-mock>=3.14",
     "respx>=0.21",
 ]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# The on-disk layout uses src/ as the package root (no inner src/<pkgname>/),
+# so the importable name IS "src". Setuptools' default src-layout discovery
+# would otherwise either fail or treat src/ as containing a package; pin the
+# layout explicitly here.
+[tool.setuptools]
+packages = ["src", "src.sources"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
