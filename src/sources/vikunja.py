@@ -101,6 +101,9 @@ def push(
       - If mapping.db has a Vikunja source_id for the local_id → UPDATE
       - Else → CREATE in config['default_project_id'] (or skip with reason)
 
+    Labels are managed via the dedicated /tasks/{id}/labels endpoints —
+    Vikunja silently ignores the `labels` field on task create/update.
+
     Returns a PushResult dict with counts.
     """
     base_url = config["base_url"].rstrip("/")
@@ -118,6 +121,11 @@ def push(
     errors = 0
 
     with httpx.Client(timeout=DEFAULT_TIMEOUT, headers=headers) as client:
+        # Pre-fetch the workspace label index once. _sync_task_labels then
+        # creates only labels that don't exist yet, instead of paying a list
+        # request per task.
+        label_cache: dict[str, int] = _fetch_all_labels(client, base_url)
+
         for task in tasks:
             local_id = task.get("local_id")
             if not local_id:
@@ -130,6 +138,7 @@ def push(
                 vikunja_id = mapping.get_source_id(local_id, "vikunja")
 
             payload = _to_vikunja_payload(task)
+            desired_tags = list(task.get("tags") or [])
 
             try:
                 if vikunja_id:
@@ -138,6 +147,7 @@ def push(
                         client, "POST", f"{base_url}/api/v1/tasks/{vikunja_id}",
                         json=payload,
                     )
+                    _sync_task_labels(client, base_url, vikunja_id, desired_tags, label_cache)
                     updated += 1
                 else:
                     # Create new Vikunja task
@@ -153,6 +163,12 @@ def push(
                     new_id = str(new_task.get("id", ""))
                     if mapping is not None and new_id:
                         mapping.upsert(local_id, "vikunja", new_id)
+                    if new_id:
+                        # New task has no labels yet — current_label_ids is empty.
+                        _sync_task_labels(
+                            client, base_url, new_id, desired_tags,
+                            label_cache, current_label_ids=set(),
+                        )
                     created += 1
             except (VikunjaAuthError, VikunjaFetchError) as exc:
                 errors += 1
@@ -182,6 +198,79 @@ def push(
             )
 
     return {"created": created, "updated": updated, "skipped": skipped}
+
+
+def _fetch_all_labels(client: httpx.Client, base_url: str) -> dict[str, int]:
+    """Return a {label_title: label_id} index of every label visible to the user."""
+    out: dict[str, int] = {}
+    for page in range(1, MAX_PAGES + 1):
+        resp = _request(
+            client, "GET", f"{base_url}/api/v1/labels",
+            params={"page": page, "per_page": 50},
+        )
+        batch = resp.json()
+        if not batch:
+            return out
+        for lbl in batch:
+            title = lbl.get("title")
+            lid = lbl.get("id")
+            if title and lid is not None:
+                out[title] = int(lid)
+    raise VikunjaFetchError(
+        f"Vikunja labels pagination exceeded MAX_PAGES={MAX_PAGES}"
+    )
+
+
+def _ensure_label(
+    client: httpx.Client, base_url: str, title: str, cache: dict[str, int]
+) -> int:
+    """Return the label id for `title`, creating the label if missing."""
+    if title in cache:
+        return cache[title]
+    resp = _request(
+        client, "PUT", f"{base_url}/api/v1/labels", json={"title": title},
+    )
+    lid = int(resp.json()["id"])
+    cache[title] = lid
+    return lid
+
+
+def _sync_task_labels(
+    client: httpx.Client,
+    base_url: str,
+    task_id: str | int,
+    desired_titles: list[str],
+    label_cache: dict[str, int],
+    current_label_ids: set[int] | None = None,
+) -> None:
+    """Reconcile labels on a task to match `desired_titles`.
+
+    Vikunja's task POST/PUT silently ignores the `labels` field; this is
+    the only correct way to sync them. Idempotent. If `current_label_ids`
+    is None, fetches the task to discover them.
+    """
+    if current_label_ids is None:
+        resp = _request(client, "GET", f"{base_url}/api/v1/tasks/{task_id}")
+        current_label_ids = {
+            int(lbl["id"]) for lbl in (resp.json().get("labels") or [])
+            if lbl.get("id") is not None
+        }
+
+    desired_ids: set[int] = set()
+    for title in desired_titles:
+        if not title:
+            continue
+        desired_ids.add(_ensure_label(client, base_url, title, label_cache))
+
+    for lid in desired_ids - current_label_ids:
+        _request(
+            client, "PUT", f"{base_url}/api/v1/tasks/{task_id}/labels",
+            json={"label_id": lid},
+        )
+    for lid in current_label_ids - desired_ids:
+        _request(
+            client, "DELETE", f"{base_url}/api/v1/tasks/{task_id}/labels/{lid}",
+        )
 
 
 def _fetch_projects(client: httpx.Client, base_url: str) -> list[dict]:
@@ -226,7 +315,17 @@ def _to_rfc3339(value: str) -> str:
 
 
 def _to_vikunja_payload(task: dict) -> dict:
-    """Convert a normalized task to a Vikunja API payload."""
+    """Convert a normalized task to a Vikunja API payload.
+
+    Notes on Vikunja semantics (verified against v2.3):
+    - POST /tasks/{id} REPLACES sent fields; omitted fields are wiped.
+      The conditional-include pattern below aligns: local None → wipe,
+      local value → set.
+    - `done_at` is server-managed: setting `done=true` auto-stamps it,
+      `done=false` clears it. Don't send it.
+    - `labels` in this payload is silently IGNORED by Vikunja. Use the
+      dedicated /tasks/{id}/labels endpoints — see _sync_task_labels.
+    """
     payload: dict = {
         "title": task.get("title", ""),
     }
@@ -244,9 +343,5 @@ def _to_vikunja_payload(task: dict) -> dict:
     due_date = task.get("due_date")
     if due_date:
         payload["due_date"] = _to_rfc3339(due_date)
-
-    tags = task.get("tags", [])
-    if tags:
-        payload["labels"] = [{"title": t} for t in tags]
 
     return payload

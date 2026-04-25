@@ -12,6 +12,9 @@ from src.sources.vikunja import (
     pull,
     push,
     _to_vikunja_payload,
+    _fetch_all_labels,
+    _ensure_label,
+    _sync_task_labels,
     VikunjaAuthError,
     VikunjaFetchError,
 )
@@ -194,6 +197,15 @@ class TestPush:
         if default_project_id is not None:
             cfg["default_project_id"] = default_project_id
         return cfg
+
+    @pytest.fixture(autouse=True)
+    def stub_label_sync(self, monkeypatch):
+        """Stub label sync — tests in TestLabelSync exercise it directly.
+        Avoids each push test mocking GET /labels + GET /tasks + PUT /labels.
+        """
+        import src.sources.vikunja as vik
+        monkeypatch.setattr(vik, "_fetch_all_labels", lambda *a, **kw: {})
+        monkeypatch.setattr(vik, "_sync_task_labels", lambda *a, **kw: None)
 
     @respx.mock
     def test_create_task_via_default_project(self, tmp_path):
@@ -400,10 +412,19 @@ class TestToVikunjaPayload:
         assert payload["done"] is True
         assert payload["priority"] == 0
 
-    def test_with_tags(self):
+    def test_tags_omitted_from_payload(self):
+        """Vikunja silently ignores 'labels' on POST/PUT — must not be sent.
+        Labels are reconciled separately via _sync_task_labels."""
         task = {"title": "T", "tags": ["a", "b"]}
         payload = _to_vikunja_payload(task)
-        assert payload["labels"] == [{"title": "a"}, {"title": "b"}]
+        assert "labels" not in payload
+
+    def test_done_at_omitted_from_payload(self):
+        """Vikunja sets done_at server-side from done; sending it would either
+        be ignored or, worse, freeze a stale completion timestamp."""
+        task = {"title": "T", "status": "done", "completed_date": "2024-01-01T00:00:00Z"}
+        payload = _to_vikunja_payload(task)
+        assert "done_at" not in payload
 
     def test_with_due_date(self):
         task = {"title": "T", "due_date": "2024-03-01"}
@@ -414,6 +435,99 @@ class TestToVikunjaPayload:
         task = {"title": "T", "due_date": "2024-03-01T15:30:00Z"}
         payload = _to_vikunja_payload(task)
         assert payload["due_date"] == "2024-03-01T15:30:00Z"
+
+
+class TestLabelSync:
+    LABELS_URL = f"{BASE_URL}/api/v1/labels"
+
+    @respx.mock
+    def test_fetch_all_labels_paginates_into_index(self):
+        respx.get(url__startswith=self.LABELS_URL).mock(
+            side_effect=[
+                httpx.Response(200, json=[{"id": 1, "title": "a"}, {"id": 2, "title": "b"}]),
+                httpx.Response(200, json=[{"id": 3, "title": "c"}]),
+                httpx.Response(200, json=[]),
+            ]
+        )
+        with httpx.Client() as client:
+            cache = _fetch_all_labels(client, BASE_URL)
+        assert cache == {"a": 1, "b": 2, "c": 3}
+
+    @respx.mock
+    def test_ensure_label_returns_cached(self):
+        # Cache hit: no API call.
+        with httpx.Client() as client:
+            assert _ensure_label(client, BASE_URL, "x", {"x": 7}) == 7
+
+    @respx.mock
+    def test_ensure_label_creates_when_missing(self):
+        respx.put(self.LABELS_URL).mock(return_value=httpx.Response(200, json={"id": 42}))
+        cache: dict[str, int] = {}
+        with httpx.Client() as client:
+            assert _ensure_label(client, BASE_URL, "newlabel", cache) == 42
+        assert cache == {"newlabel": 42}
+
+    @respx.mock
+    def test_sync_attaches_missing_labels(self):
+        # Existing labels [1]; want [1, 2]. Should attach 2, not detach 1.
+        respx.get(f"{BASE_URL}/api/v1/tasks/100").mock(
+            return_value=httpx.Response(200, json={"id": 100, "labels": [{"id": 1}]})
+        )
+        attach = respx.put(f"{BASE_URL}/api/v1/tasks/100/labels")
+        attach.mock(return_value=httpx.Response(200, json={}))
+        delete = respx.delete(f"{BASE_URL}/api/v1/tasks/100/labels/1")
+
+        with httpx.Client() as client:
+            _sync_task_labels(client, BASE_URL, 100, ["a", "b"], {"a": 1, "b": 2})
+        # Attached label 2; never deleted label 1.
+        assert attach.call_count == 1
+        assert delete.call_count == 0
+
+    @respx.mock
+    def test_sync_detaches_stale_labels(self):
+        respx.get(f"{BASE_URL}/api/v1/tasks/100").mock(
+            return_value=httpx.Response(200, json={"id": 100, "labels": [{"id": 1}, {"id": 2}]})
+        )
+        attach = respx.put(f"{BASE_URL}/api/v1/tasks/100/labels")
+        delete = respx.delete(f"{BASE_URL}/api/v1/tasks/100/labels/2").mock(
+            return_value=httpx.Response(204, json={})
+        )
+
+        with httpx.Client() as client:
+            _sync_task_labels(client, BASE_URL, 100, ["a"], {"a": 1, "b": 2})
+        assert attach.call_count == 0
+        assert delete.call_count == 1
+
+    @respx.mock
+    def test_sync_creates_missing_label_then_attaches(self):
+        respx.get(f"{BASE_URL}/api/v1/tasks/100").mock(
+            return_value=httpx.Response(200, json={"id": 100, "labels": []})
+        )
+        create = respx.put(self.LABELS_URL).mock(
+            return_value=httpx.Response(200, json={"id": 999})
+        )
+        attach = respx.put(f"{BASE_URL}/api/v1/tasks/100/labels").mock(
+            return_value=httpx.Response(200, json={})
+        )
+        cache: dict[str, int] = {}
+        with httpx.Client() as client:
+            _sync_task_labels(client, BASE_URL, 100, ["new-label"], cache)
+        assert create.call_count == 1
+        assert attach.call_count == 1
+        assert cache == {"new-label": 999}
+
+    @respx.mock
+    def test_sync_skips_get_when_current_provided(self):
+        """Create path passes current_label_ids=set() to skip the redundant GET."""
+        # No GET task mock — would error if called.
+        attach = respx.put(f"{BASE_URL}/api/v1/tasks/100/labels").mock(
+            return_value=httpx.Response(200, json={})
+        )
+        with httpx.Client() as client:
+            _sync_task_labels(
+                client, BASE_URL, 100, ["a"], {"a": 1}, current_label_ids=set(),
+            )
+        assert attach.call_count == 1
 
 
 class TestRetryLogic:
