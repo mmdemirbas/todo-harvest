@@ -610,7 +610,10 @@ def _inspect_stats(items: list[dict]) -> int:
     table.add_column("Has desc", justify="right")
     table.add_column("Has due", justify="right")
     table.add_column("Has tags", justify="right")
-    table.add_column("Has completed", justify="right")
+    # "Has comp date", not "Has completed" — Notion never emits a completion
+    # timestamp even when status=done, so this measures the field's presence,
+    # not actual completion. Use the Status distribution table for done counts.
+    table.add_column("Has comp date", justify="right")
     table.add_column("Oldest created")
     table.add_column("Newest updated")
 
