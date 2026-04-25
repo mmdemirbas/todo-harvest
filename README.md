@@ -164,7 +164,7 @@ Every task is normalized to a common format regardless of source:
 |----------------|---------------------|------------------------------------------|
 | `id`           | string              | `{source}-{source_id}`                   |
 | `local_id`     | string              | Stable UUID assigned on first pull        |
-| `source`       | string              | `vikunja`, `mstodo`, `jira`, or `notion` |
+| `source`       | string              | `vikunja`, `mstodo`, `jira`, `notion`, or `plane` |
 | `title`        | string              | Task title                               |
 | `description`  | string or null      | Task description/body                    |
 | `status`       | string              | `todo`, `in_progress`, `done`, `cancelled` |
