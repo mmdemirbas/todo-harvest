@@ -93,6 +93,39 @@ class TestSaveLocalState:
         assert "Ünïcödé" in content
         assert "日本語" in content
 
+    def test_atomic_write_preserves_original_on_crash(self, tmp_path, monkeypatch):
+        """If json.dump raises mid-write, the original file stays intact and no temp leaks."""
+        path = tmp_path / "todos.json"
+        save_local_state(
+            [_make_item("jira", "PROJ-1", local_id="lid-1", title="ORIGINAL")],
+            path,
+        )
+        original = path.read_text("utf-8")
+
+        def boom(*args, **kwargs):
+            raise OSError("simulated disk full")
+
+        monkeypatch.setattr("src.local_state.json.dump", boom)
+        with pytest.raises(OSError):
+            save_local_state(
+                [_make_item("jira", "PROJ-1", local_id="lid-1", title="REPLACED")],
+                path,
+            )
+
+        assert path.read_text("utf-8") == original
+        leftovers = [p for p in tmp_path.iterdir() if p.name.startswith(f".{path.name}.")]
+        assert leftovers == [], f"temp file leaked: {leftovers}"
+
+    def test_atomic_write_creates_no_temp_on_success(self, tmp_path):
+        """Successful write leaves no .tmp sibling behind."""
+        path = tmp_path / "todos.json"
+        save_local_state(
+            [_make_item("jira", "PROJ-1", local_id="lid-1")],
+            path,
+        )
+        leftovers = [p for p in tmp_path.iterdir() if p.name.startswith(f".{path.name}.")]
+        assert leftovers == []
+
 
 class TestMergePulledItems:
     def test_new_item_created(self, mapping):

@@ -6,6 +6,8 @@ Reads, writes, and merges normalized items into the local state file.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -32,11 +34,28 @@ def load_local_state(path: Path = DEFAULT_STATE_PATH) -> list[dict]:
 
 
 def save_local_state(items: list[dict], path: Path = DEFAULT_STATE_PATH) -> None:
-    """Write todos.json sorted deterministically by (source, id)."""
+    """Write todos.json sorted deterministically by (source, id), atomically.
+
+    Writes to a sibling temp file then os.replace's into place so a crash mid-
+    write leaves the previous file intact rather than truncating it.
+    """
     sorted_items = sorted(items, key=_sort_key)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(sorted_items, f, indent=2, ensure_ascii=False, default=str)
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(sorted_items, f, indent=2, ensure_ascii=False, default=str)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_name, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
 
 
 def merge_pulled_items(
