@@ -119,20 +119,22 @@ Fresh review against the 14-fix branch. New issues only — does not repeat alre
 
 Tightly scoped to commits `ffa87e2` (per-field snapshot) and `b1bb4d1` (default=str removal). Reviewer traced the snapshot correctness manually and confirmed it stores source's last-seen value (not merged result), which is the right design. No data-correctness bugs in the core diff. End-to-end smoke against Vikunja v2.3 verified: independent local + source edits both survive (T0–T5 sequence).
 
+**Status:** P1-1, P2-1, T1, T2 all shipped in the same commit (single round of polish).
+
 ### P1 — semantics
 
-**P1-1 — `conflicts` counter counts any field difference, not bilateral conflicts**
+**P1-1 — `conflicts` counter counts any field difference, not bilateral conflicts** [SHIPPED]
 `src/local_state.py` `_merge_fields` increments `conflicts += 1` whenever `local_val != source_val`, including pure source-only updates. After a routine pull where source changed 50 statuses and local was untouched, the summary reports `conflicts: 50` even though zero bilateral conflicts occurred. Pre-existing semantic, but the snapshot path makes it more conspicuous because every source-only change now flows through the conflict path explicitly.
 
 ### P2 — test polish
 
-**P2-1 — `test_merge_writes_atomically_per_pull` upsert-count assumption silently brittle**
+**P2-1 — `test_merge_writes_atomically_per_pull` upsert-count assumption silently brittle** [SHIPPED]
 `tests/test_local_state.py` patches the 3rd `upsert` to raise. Works today because all three items are new (1 upsert each). Pre-existing items would now also call upsert (skip path was changed in `ffa87e2`), so adding a mixed-case scenario to this test would mis-target the failure. Doc-comment fix.
 
 ### Test gaps
 
-**T1 — Snapshot content not asserted after merge**
+**T1 — Snapshot content not asserted after merge** [SHIPPED — `test_snapshot_stores_source_values_not_merged_result`]
 Existing per-field tests check the merged item state but don't read `get_last_pulled_fields` to confirm the snapshot was written with source's values. If `new_snapshot` were accidentally built from `local_item`, the per-field tests still pass (local wins → correct field), but the bug would surface only on the third pull.
 
-**T2 — `export_json` not tested for `TypeError` on non-serializable values**
+**T2 — `export_json` not tested for `TypeError` on non-serializable values** [SHIPPED — `test_non_serializable_value_raises_loudly` in test_exporter.py]
 `save_local_state` has the test (`test_non_serializable_value_raises_loudly`); `export_json` doesn't. Same `default=str` removal applies to both.

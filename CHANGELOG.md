@@ -43,6 +43,10 @@ All notable changes to this project are documented here. Format follows
   tolerates attributes containing `>`.
 - Tags lists are sorted+deduped in every normalizer so reordering on the
   source side does not register as a conflict on every pull.
+- Pull summary's `conflicts` counter now reports only true bilateral
+  conflicts (both sides changed since last pull), not any field
+  difference. Pure source-only updates were inflating the metric to
+  the field-change count of routine pulls.
 - `save_local_state` and `export_json` no longer use `default=str` —
   any non-JSON-serializable value now raises `TypeError` instead of
   silently coercing to a string and drifting the schema across cycles.
