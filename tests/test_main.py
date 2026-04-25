@@ -438,6 +438,54 @@ class TestInspect:
         assert "Status distribution" in out
         assert "todo" in out
 
+    def test_inspect_stats_date_range_handles_mixed_iso_formats(self, tmp_path, monkeypatch):
+        """min/max on raw ISO strings mis-orders +0000 vs Z timestamps for
+        the same instant. Compare on the YYYY-MM-DD prefix instead.
+
+        Tests _inspect_stats directly to avoid the Rich-table truncation that
+        happens in capsys (narrow virtual terminal swallows the date columns).
+        """
+        from rich.console import Console
+        from rich.table import Table
+        import src.main as main_mod
+
+        # Capture row data from add_row instead of fighting Rich's renderer.
+        calls: list[list[str]] = []
+        orig_add_row = Table.add_row
+
+        def spy_add_row(self_, *args, **kw):
+            calls.append([str(a) for a in args])
+            return orig_add_row(self_, *args, **kw)
+
+        monkeypatch.setattr(Table, "add_row", spy_add_row)
+
+        items = [
+            {
+                "id": "jira-A", "local_id": "l1", "source": "jira",
+                "title": "A", "status": "todo", "priority": "none",
+                "tags": [], "category": {"id": None, "name": None, "type": "other"},
+                "raw": {},
+                "created_date": "2023-12-31T23:59:00.000+0000",  # Jira-style
+                "updated_date": "2024-01-01T00:00:00.000+0000",
+            },
+            {
+                "id": "vikunja-B", "local_id": "l2", "source": "vikunja",
+                "title": "B", "status": "todo", "priority": "none",
+                "tags": [], "category": {"id": None, "name": None, "type": "other"},
+                "raw": {},
+                "created_date": "2024-06-01T00:00:00Z",
+                "updated_date": "2024-12-31T23:59:00Z",  # Vikunja-style
+            },
+        ]
+        main_mod._inspect_stats(items)
+
+        # Find the per-source row for jira (oldest created) and vikunja (latest updated)
+        jira_row = next(r for r in calls if r and r[0] == "jira")
+        vikunja_row = next(r for r in calls if r and r[0] == "vikunja")
+        # Last two add_row args are oldest_created, newest_updated
+        assert jira_row[-2] == "2023-12-31"
+        assert vikunja_row[-1] == "2024-12-31"
+
     def test_inspect_fields(self, populated):
         result = main(["--config", str(populated), "inspect", "fields"])
         assert result == 0

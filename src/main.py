@@ -621,14 +621,17 @@ def _inspect_stats(items: list[dict]) -> int:
         has_due = sum(1 for x in xs if x.get("due_date"))
         has_tags = sum(1 for x in xs if x.get("tags"))
         has_comp = sum(1 for x in xs if x.get("completed_date"))
-        created = [x["created_date"] for x in xs if x.get("created_date")]
-        updated = [x["updated_date"] for x in xs if x.get("updated_date")]
+        # Compare on the YYYY-MM-DD prefix only — full-string min/max would
+        # mis-order mixed timezone formats (e.g. "...+0000" sorts before "...Z"
+        # for the same instant).
+        created = [x["created_date"][:10] for x in xs if x.get("created_date")]
+        updated = [x["updated_date"][:10] for x in xs if x.get("updated_date")]
         table.add_row(
             src, str(n),
             f"{has_desc}/{n}", f"{has_due}/{n}",
             f"{has_tags}/{n}", f"{has_comp}/{n}",
-            min(created)[:10] if created else "—",
-            max(updated)[:10] if updated else "—",
+            min(created) if created else "—",
+            max(updated) if updated else "—",
         )
 
     console.print(table)
