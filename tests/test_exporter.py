@@ -137,6 +137,23 @@ class TestExportCsv:
             ids = [row["id"] for row in reader]
         assert ids == ["jira-PROJ-1", "jira-PROJ-2", "notion-page-001"]
 
+    def test_completed_date_written(self, tmp_path, sample_items):
+        """CSV_COLUMNS declares completed_date — make sure the row dict
+        actually populates it."""
+        # rows are sorted by (source, id); the notion item ends up last.
+        for item in sample_items:
+            if item["id"] == "notion-page-001":
+                item["completed_date"] = "2024-02-15T10:00:00Z"
+        path = tmp_path / "test.csv"
+        export_csv(sample_items, path)
+        with open(path, encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        notion_row = next(r for r in rows if r["id"] == "notion-page-001")
+        assert notion_row["completed_date"] == "2024-02-15T10:00:00Z"
+        # Items without completed_date stay empty.
+        jira_row = next(r for r in rows if r["id"] == "jira-PROJ-1")
+        assert jira_row["completed_date"] == ""
+
     def test_tags_semicolon_separated(self, tmp_path, sample_items):
         path = tmp_path / "test.csv"
         export_csv(sample_items, path)

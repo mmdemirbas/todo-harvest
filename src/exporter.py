@@ -43,6 +43,7 @@ def export_csv(items: list[dict], path: Path) -> None:
                 "created_date": item.get("created_date") or "",
                 "due_date": item.get("due_date") or "",
                 "updated_date": item.get("updated_date") or "",
+                "completed_date": item.get("completed_date") or "",
                 "tags": ";".join(item.get("tags", [])),
                 "url": item.get("url") or "",
                 "category_id": (item.get("category") or {}).get("id") or "",
