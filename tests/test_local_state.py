@@ -232,6 +232,22 @@ class TestMergePulledItems:
         assert stats == {"created": 0, "updated": 0, "skipped": 0, "conflicts": 0}
         assert len(local) == 1
 
+    def test_pull_preserves_items_with_empty_local_id(self, mapping):
+        """Hand-edited items with local_id='' must survive a merge cycle."""
+        orphan = _make_item("notion", "page-1", title="Hand-edited", local_id="")
+        del orphan["local_id"]  # also test fully-missing key
+        also_orphan = _make_item("jira", "PROJ-X", title="No id", local_id="")
+
+        pulled = [_make_item("vikunja", "1", title="From source")]
+        local, _ = merge_pulled_items(
+            [orphan, also_orphan], pulled, mapping, "vikunja",
+        )
+
+        titles = {item.get("title") for item in local}
+        assert "Hand-edited" in titles
+        assert "No id" in titles
+        assert "From source" in titles
+
     def test_pull_preserves_items_from_other_sources(self, mapping):
         """Pulling jira items must not lose existing notion items in local state."""
         notion_item = _make_item("notion", "page-1", title="Notion Task", local_id="lid-notion")

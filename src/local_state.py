@@ -75,12 +75,17 @@ def merge_pulled_items(
     """
     stats: MergeStats = {"created": 0, "updated": 0, "skipped": 0, "conflicts": 0}
 
-    # Index local items by local_id for O(1) lookup
+    # Index local items by local_id for O(1) lookup. Items missing a local_id
+    # (hand-edited, imported, malformed) are preserved verbatim so a merge
+    # cycle never silently deletes them.
     local_by_id: dict[str, dict] = {}
+    orphans_no_id: list[dict] = []
     for item in local_items:
         lid = item.get("local_id")
         if lid:
             local_by_id[lid] = item
+        else:
+            orphans_no_id.append(item)
 
     source_prefix = f"{source}-"
     for pulled in pulled_items:
@@ -137,7 +142,7 @@ def merge_pulled_items(
                     mapping.mark_synced(local_id, source)
                     stats["skipped"] += 1
 
-    return list(local_by_id.values()), stats
+    return list(local_by_id.values()) + orphans_no_id, stats
 
 
 # User-mutable fields that participate in conflict resolution during merge.
