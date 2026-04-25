@@ -331,7 +331,7 @@ def main(argv: list[str] | None = None) -> int:
     console.print()
 
     if command == "pull":
-        return _cmd_pull(config, services)
+        return _cmd_pull(config, services)[0]
     elif command == "push":
         return _cmd_push(config, services)
     elif command == "sync":
@@ -365,7 +365,7 @@ def _resolve_services(config: dict, requested: list[str]) -> tuple[list[str], st
     return enabled_sources(config), None
 
 
-def _cmd_pull(config: dict, services: list[str]) -> int:
+def _cmd_pull(config: dict, services: list[str]) -> tuple[int, list[str]]:
     """Pull from specified services into local state."""
     from src.normalizer import normalize
     from src.local_state import load_local_state, save_local_state, merge_pulled_items
@@ -376,6 +376,7 @@ def _cmd_pull(config: dict, services: list[str]) -> int:
 
     had_errors = False
     all_stats = []
+    succeeded: list[str] = []
 
     with SyncMapping(db_path) as mapping:
         local_items = load_local_state(state_path)
@@ -415,12 +416,13 @@ def _cmd_pull(config: dict, services: list[str]) -> int:
             local_items, stats = merge_pulled_items(local_items, normalized, mapping, service)
             mapping.log_sync(service, "pull", len(normalized))
             all_stats.append({"service": service, **stats})
+            succeeded.append(service)
 
         save_local_state(local_items, state_path)
 
     # Summary
     _print_pull_summary(all_stats, len(local_items))
-    return 1 if had_errors else 0
+    return (1 if had_errors else 0), succeeded
 
 
 def _cmd_push(config: dict, services: list[str]) -> int:
@@ -471,9 +473,22 @@ def _cmd_push(config: dict, services: list[str]) -> int:
 
 
 def _cmd_sync(config: dict, services: list[str]) -> int:
-    """Pull all specified services, then push to all."""
-    pull_result = _cmd_pull(config, services)
-    push_result = _cmd_push(config, services)
+    """Pull all specified services, then push to those that pulled cleanly.
+
+    A failed pull leaves local state stale for that service; pushing back
+    would overwrite remote changes with stale data. Push only to services
+    that pulled successfully.
+    """
+    pull_result, succeeded = _cmd_pull(config, services)
+    skipped = [s for s in services if s not in succeeded]
+    if skipped:
+        console.print(
+            f"[yellow]Skipping push for failed pulls:[/] {', '.join(skipped)}"
+        )
+    if not succeeded:
+        console.print("[bold yellow]No services pulled successfully — nothing to push.[/]")
+        return 1
+    push_result = _cmd_push(config, succeeded)
     return 1 if (pull_result != 0 or push_result != 0) else 0
 
 

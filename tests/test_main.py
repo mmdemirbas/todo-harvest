@@ -283,6 +283,59 @@ class TestSync:
             REGISTRY["jira"].pull = orig
         assert result == 1
 
+    def test_sync_skips_push_for_failed_pull_service(self, config_file, mock_sources, tmp_path):
+        """If pull fails for vikunja but succeeds for jira, push must run for jira only —
+        pushing stale data to vikunja could overwrite remote changes."""
+        from src.sources import REGISTRY
+        push_calls: list[str] = []
+
+        orig_v_pull = REGISTRY["vikunja"].pull
+        orig_v_push = REGISTRY["vikunja"].push
+        orig_j_push = REGISTRY["jira"].push
+
+        REGISTRY["vikunja"].pull = (
+            lambda c, con=None: (_ for _ in ()).throw(SourceFetchError("vikunja down"))
+        )
+        REGISTRY["vikunja"].push = lambda c, t, con=None, mapping=None: (
+            push_calls.append("vikunja") or {"created": 0, "updated": 0, "skipped": 0}
+        )
+        REGISTRY["jira"].push = lambda c, t, con=None, mapping=None: (
+            push_calls.append("jira") or {"created": 0, "updated": 0, "skipped": 0}
+        )
+
+        try:
+            main(["--config", str(config_file), "sync", "vikunja", "jira"])
+        finally:
+            REGISTRY["vikunja"].pull = orig_v_pull
+            REGISTRY["vikunja"].push = orig_v_push
+            REGISTRY["jira"].push = orig_j_push
+
+        assert "vikunja" not in push_calls, "stale-data push must not run for failed pull"
+        # jira push may or may not run depending on push_supported flag — just ensure
+        # vikunja was skipped, which is the safety property we're protecting.
+
+    def test_sync_skips_push_entirely_when_all_pulls_fail(self, config_file, mock_sources, tmp_path):
+        from src.sources import REGISTRY
+        push_calls: list[str] = []
+        orig_v_pull = REGISTRY["vikunja"].pull
+        orig_v_push = REGISTRY["vikunja"].push
+
+        REGISTRY["vikunja"].pull = (
+            lambda c, con=None: (_ for _ in ()).throw(SourceFetchError("down"))
+        )
+        REGISTRY["vikunja"].push = lambda c, t, con=None, mapping=None: (
+            push_calls.append("vikunja") or {"created": 0, "updated": 0, "skipped": 0}
+        )
+
+        try:
+            result = main(["--config", str(config_file), "sync", "vikunja"])
+        finally:
+            REGISTRY["vikunja"].pull = orig_v_pull
+            REGISTRY["vikunja"].push = orig_v_push
+
+        assert result == 1
+        assert push_calls == []
+
 
 class TestExport:
     def test_export_no_local_tasks(self, config_file, tmp_path):
