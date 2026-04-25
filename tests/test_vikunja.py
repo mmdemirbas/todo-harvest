@@ -336,7 +336,7 @@ class TestNormalizeVikunja:
 
     def test_tags_from_labels(self, tasks):
         result = normalize_vikunja(tasks[0])
-        assert result["tags"] == ["devops", "ci"]
+        assert result["tags"] == ["ci", "devops"]  # sorted for stable comparison
 
     def test_tags_empty(self, tasks):
         result = normalize_vikunja(tasks[1])

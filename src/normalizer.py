@@ -58,9 +58,9 @@ def normalize_vikunja(raw: dict, source_config: dict | None = None) -> dict:
     if due_date == "0001-01-01T00:00:00Z":
         due_date = None
 
-    # Tags from labels
+    # Tags from labels — sorted for stable comparison across pulls
     labels = raw.get("labels") or []
-    tags = [label.get("title", "") for label in labels if label.get("title")]
+    tags = sorted({label.get("title", "") for label in labels if label.get("title")})
 
     # URL
     url = None
@@ -150,8 +150,8 @@ def normalize_jira(raw: dict, source_config: dict | None = None) -> dict:
     # Category — epic parent or project
     category = _jira_category(fields)
 
-    # Tags from labels
-    tags = list(fields.get("labels") or [])
+    # Tags from labels — sorted for stable comparison across pulls
+    tags = sorted(set(fields.get("labels") or []))
 
     # URL
     self_url = raw.get("self", "")
@@ -332,7 +332,7 @@ def normalize_notion(raw: dict, source_config: dict | None = None) -> dict:
                 tags.append(prop["select"]["name"])
             elif prop.get("type") == "multi_select":
                 tags.extend(ms["name"] for ms in prop.get("multi_select", []))
-    tags = list(dict.fromkeys(tags))
+    tags = sorted(set(tags))
 
     # Category — configurable, or database
     cat_field = field_map.get("category")
@@ -498,14 +498,13 @@ def normalize_mstodo(raw: dict, source_config: dict | None = None) -> dict:
     if due_dt and isinstance(due_dt, dict):
         due_date = due_dt.get("dateTime")
 
-    # Tags from categories
-    categories = raw.get("categories")
-    tags = list(categories) if categories else []
-
-    # Add list name to tags
+    # Tags from categories + list name; sorted for stable comparison.
+    categories = raw.get("categories") or []
+    tag_set = set(categories)
     list_name = raw.get("_list_name")
-    if list_name and list_name not in tags:
-        tags.append(list_name)
+    if list_name:
+        tag_set.add(list_name)
+    tags = sorted(tag_set)
 
     # Category — the task list
     category = {
@@ -589,7 +588,7 @@ def normalize_plane(raw: dict, source_config: dict | None = None) -> dict:
     if description is not None and not description.strip():
         description = None
 
-    tags = list(raw.get("_label_names") or [])
+    tags = sorted(set(raw.get("_label_names") or []))
 
     url = None
     base_url = raw.get("_base_url")

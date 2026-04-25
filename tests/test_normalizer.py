@@ -129,7 +129,15 @@ class TestNormalizeJira:
 
     def test_tags_from_labels(self, issues):
         result = normalize("jira", issues[0])
-        assert result["tags"] == ["devops", "ci"]
+        assert result["tags"] == ["ci", "devops"]  # sorted for stable comparison
+
+    def test_tags_stable_order_regardless_of_input(self, issues):
+        """Same labels in different input order must produce same output — otherwise
+        every pull triggers a spurious conflict on the tags field."""
+        original = issues[0]["fields"]["labels"]
+        issues[0]["fields"]["labels"] = list(reversed(original))
+        result = normalize("jira", issues[0])
+        assert result["tags"] == sorted(set(original))
 
     def test_tags_empty(self, issues):
         result = normalize("jira", issues[1])
