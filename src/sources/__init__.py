@@ -89,10 +89,17 @@ class SourceDef:
         """Apply source-specific mapping-table migrations (legacy id formats etc).
 
         No-op when the source module defines no `migrate_legacy_mappings`.
+        Runs inside `mapping.transaction()` so a migration touching N rows
+        commits once instead of N times.
         """
         mod = self._load()
         fn = getattr(mod, "migrate_legacy_mappings", None)
-        if fn is not None:
+        if fn is None:
+            return
+        if hasattr(mapping, "transaction"):
+            with mapping.transaction():
+                fn(mapping, raw_items)
+        else:
             fn(mapping, raw_items)
 
 

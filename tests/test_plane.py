@@ -410,6 +410,38 @@ class TestMigrateLegacyMappings:
             migrate_legacy_mappings(m, raw)
             assert m.get_local_id("plane", "proj-1-42") == "lid-1"
 
+    def test_migrate_via_sourcedef_uses_transaction(self, tmp_path):
+        """SourceDef.migrate must wrap migrate_legacy_mappings in a transaction
+        so N relabel calls commit once, not N times. Also verifies rollback
+        is atomic if migration raises mid-way."""
+        from src.sources import REGISTRY
+        with SyncMapping(tmp_path / "m.db") as m:
+            for i in range(3):
+                m.upsert(f"lid-{i}", "plane", f"proj-X-{i}")
+            raw = [
+                {"id": f"uuid-{i}", "sequence_id": i, "_project_id": "proj-X"}
+                for i in range(3)
+            ]
+
+            # Inside SourceDef.migrate, _in_transaction must be True
+            # while migrate_legacy_mappings runs.
+            seen: list[bool] = []
+            real_relabel = m.relabel_source_id
+
+            def spy(*args, **kwargs):
+                seen.append(m._in_transaction)
+                return real_relabel(*args, **kwargs)
+
+            m.relabel_source_id = spy  # type: ignore[method-assign]
+            REGISTRY["plane"].migrate(m, raw)
+
+            assert seen == [True, True, True], (
+                f"migrate ran without active transaction: {seen}"
+            )
+            for i in range(3):
+                assert m.get_local_id("plane", f"proj-X-{i}") is None
+                assert m.get_local_id("plane", f"proj-X:uuid-{i}") == f"lid-{i}"
+
 
 class TestRelabelSourceId:
     def test_renames_in_place(self, tmp_path):
