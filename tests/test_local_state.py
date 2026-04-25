@@ -116,6 +116,20 @@ class TestSaveLocalState:
         leftovers = [p for p in tmp_path.iterdir() if p.name.startswith(f".{path.name}.")]
         assert leftovers == [], f"temp file leaked: {leftovers}"
 
+    def test_non_serializable_value_raises_loudly(self, tmp_path):
+        """default=str was removed: any non-JSON-serializable value (e.g. a
+        datetime injected by accident) must surface as TypeError instead of
+        silently round-tripping as a string and drifting the schema."""
+        from datetime import datetime
+        path = tmp_path / "todos.json"
+        item = _make_item("jira", "PROJ-1", local_id="lid-1")
+        item["raw"] = {"injected": datetime(2024, 1, 1)}  # not JSON-serializable
+        with pytest.raises(TypeError):
+            save_local_state([item], path)
+        # No partial file left behind (atomic write semantics)
+        leftovers = [p for p in tmp_path.iterdir() if p.name.startswith(f".{path.name}.")]
+        assert leftovers == []
+
     def test_atomic_write_creates_no_temp_on_success(self, tmp_path):
         """Successful write leaves no .tmp sibling behind."""
         path = tmp_path / "todos.json"

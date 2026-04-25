@@ -46,7 +46,7 @@ def save_local_state(items: list[dict], path: Path = DEFAULT_STATE_PATH) -> None
     )
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(sorted_items, f, indent=2, ensure_ascii=False, default=str)
+            json.dump(sorted_items, f, indent=2, ensure_ascii=False)
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp_name, path)

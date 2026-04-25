@@ -18,7 +18,7 @@ def export_json(items: list[dict], path: Path) -> None:
     sorted_items = sorted(items, key=_sort_key)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(sorted_items, f, indent=2, ensure_ascii=False, default=str)
+        json.dump(sorted_items, f, indent=2, ensure_ascii=False)
 
 
 def export_csv(items: list[dict], path: Path) -> None:
