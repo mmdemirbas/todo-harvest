@@ -80,6 +80,24 @@ class TestPull:
         assert len(tasks) == 5
 
     @respx.mock
+    def test_pagination_max_pages_raises(self, monkeypatch, tasks_fixture, projects_fixture):
+        """Vikunja using page-number iteration: hard cap kicks in if API never returns empty."""
+        import src.sources.vikunja as vik_mod
+        monkeypatch.setattr(vik_mod, "MAX_PAGES", 2)
+        respx.get(url__startswith=PROJECTS_URL).mock(
+            side_effect=[
+                httpx.Response(200, json=projects_fixture),
+                httpx.Response(200, json=[]),
+            ]
+        )
+        # API never returns an empty page → infinite loop without the cap
+        respx.get(url__startswith=TASKS_URL).mock(
+            return_value=httpx.Response(200, json=tasks_fixture[:1])
+        )
+        with pytest.raises(VikunjaFetchError, match="exceeded MAX_PAGES"):
+            pull(VIKUNJA_CONFIG)
+
+    @respx.mock
     def test_empty_result(self, projects_fixture):
         respx.get(url__startswith=PROJECTS_URL).mock(
             side_effect=[

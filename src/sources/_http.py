@@ -11,6 +11,12 @@ MAX_RETRIES = 3
 RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
 BACKOFF_BASE = 1.0
 
+# Hard cap on pages a single pull can iterate. At PAGE_SIZE=100 that is 100k
+# items per source — well above any personal-use volume — and protects against
+# a buggy or hostile API that returns a non-empty page indefinitely or cycles
+# its cursor.
+MAX_PAGES = 1000
+
 
 class SourceAuthError(Exception):
     """Base class for authentication errors from any source."""
@@ -69,4 +75,6 @@ def request_with_retry(
 
         return resp
 
-    raise last_exc  # type: ignore[misc]
+    if last_exc is None:
+        raise fetch_error_cls(f"No attempts completed for {method} {url}")
+    raise last_exc

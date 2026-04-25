@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 from src.sources._http import (
     SourceAuthError, SourceFetchError,
-    request_with_retry, DEFAULT_TIMEOUT,
+    request_with_retry, DEFAULT_TIMEOUT, MAX_PAGES,
 )
 
 
@@ -60,8 +60,7 @@ def pull(config: dict, console: Console | None = None) -> list[dict]:
         project_map = {p["id"]: p.get("title", "Untitled") for p in projects}
 
         # Fetch tasks from all projects
-        page = 1
-        while True:
+        for page in range(1, MAX_PAGES + 1):
             resp = _request(
                 client, "GET", f"{base_url}/api/v1/tasks",
                 params={"page": page, "per_page": 50},
@@ -79,8 +78,10 @@ def pull(config: dict, console: Console | None = None) -> list[dict]:
 
             if console:
                 console.print(f"  Vikunja: fetched {len(all_tasks)} tasks...", end="\r")
-
-            page += 1
+        else:
+            raise VikunjaFetchError(
+                f"Vikunja tasks pagination exceeded MAX_PAGES={MAX_PAGES}"
+            )
 
     if console:
         console.print(f"  Vikunja: fetched {len(all_tasks)} tasks total.")
@@ -186,18 +187,18 @@ def push(
 def _fetch_projects(client: httpx.Client, base_url: str) -> list[dict]:
     """Fetch all Vikunja projects."""
     projects: list[dict] = []
-    page = 1
-    while True:
+    for page in range(1, MAX_PAGES + 1):
         resp = _request(
             client, "GET", f"{base_url}/api/v1/projects",
             params={"page": page, "per_page": 50},
         )
         batch = resp.json()
         if not batch:
-            break
+            return projects
         projects.extend(batch)
-        page += 1
-    return projects
+    raise VikunjaFetchError(
+        f"Vikunja projects pagination exceeded MAX_PAGES={MAX_PAGES}"
+    )
 
 
 # -- Vikunja status/priority mapping (for push) --

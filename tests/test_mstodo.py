@@ -304,6 +304,23 @@ class TestFetchTasksForList:
         assert len(tasks) == 5
         assert route.call_count == 2
 
+    @respx.mock
+    def test_pagination_repeated_nextlink_raises(self, tasks_fixture):
+        """Buggy server returning the same @odata.nextLink must not infinite-loop."""
+        from src.sources.mstodo import MstodoFetchError
+        task_url = f"{GRAPH_BASE}/me/todo/lists/list-001/tasks"
+        cycling_link = f"{task_url}?$skip=2"
+        page = {
+            "value": tasks_fixture["value"][:1],
+            "@odata.nextLink": cycling_link,
+        }
+        respx.get(url__startswith=task_url).mock(
+            side_effect=[httpx.Response(200, json=page), httpx.Response(200, json=page)]
+        )
+        with httpx.Client(headers={"Authorization": "Bearer test"}) as client:
+            with pytest.raises(MstodoFetchError, match="repeated nextLink"):
+                _fetch_tasks_for_list(client, "list-001")
+
 
 class TestFetchAll:
     @respx.mock

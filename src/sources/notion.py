@@ -7,7 +7,7 @@ from rich.console import Console
 
 from src.sources._http import (
     SourceAuthError, SourceFetchError,
-    request_with_retry, DEFAULT_TIMEOUT,
+    request_with_retry, DEFAULT_TIMEOUT, MAX_PAGES,
 )
 
 API_BASE = "https://api.notion.com/v1"
@@ -63,8 +63,9 @@ def _fetch_database_pages(
     """Fetch all pages from a single Notion database with pagination."""
     pages: list[dict] = []
     start_cursor = None
+    seen_cursors: set[str] = set()
 
-    while True:
+    for _ in range(MAX_PAGES):
         body: dict = {"page_size": PAGE_SIZE}
         if start_cursor:
             body["start_cursor"] = start_cursor
@@ -81,13 +82,20 @@ def _fetch_database_pages(
             console.print(f"  Notion: fetched {len(pages)} pages...", end="\r")
 
         if not data.get("has_more", False):
-            break
+            return pages
         next_cursor = data.get("next_cursor")
         if not next_cursor:
-            break
+            return pages
+        if next_cursor in seen_cursors:
+            raise NotionFetchError(
+                f"Notion returned a repeated cursor {next_cursor!r}"
+            )
+        seen_cursors.add(next_cursor)
         start_cursor = next_cursor
 
-    return pages
+    raise NotionFetchError(
+        f"Notion pagination exceeded MAX_PAGES={MAX_PAGES}"
+    )
 
 
 def pull(config: dict, console: Console | None = None) -> list[dict]:

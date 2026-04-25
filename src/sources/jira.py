@@ -8,7 +8,7 @@ from rich.console import Console
 
 from src.sources._http import (
     SourceAuthError, SourceFetchError,
-    request_with_retry, DEFAULT_TIMEOUT,
+    request_with_retry, DEFAULT_TIMEOUT, MAX_PAGES,
 )
 
 PAGE_SIZE = 100
@@ -72,9 +72,10 @@ def pull(config: dict, console: Console | None = None) -> list[dict]:
 
     issues: list[dict] = []
     next_page_token: str | None = None
+    seen_tokens: set[str] = set()
 
     with httpx.Client(timeout=DEFAULT_TIMEOUT, headers=headers) as client:
-        while True:
+        for _ in range(MAX_PAGES):
             body: dict = {
                 "jql": jql,
                 "maxResults": PAGE_SIZE,
@@ -96,8 +97,17 @@ def pull(config: dict, console: Console | None = None) -> list[dict]:
                 console.print(f"  Jira: fetched {len(issues)} issues...", end="\r")
 
             next_page_token = data.get("nextPageToken")
-            if data.get("isLast", True) or not batch:
+            if data.get("isLast", True) or not batch or not next_page_token:
                 break
+            if next_page_token in seen_tokens:
+                raise JiraFetchError(
+                    f"Jira returned a repeated nextPageToken {next_page_token!r}"
+                )
+            seen_tokens.add(next_page_token)
+        else:
+            raise JiraFetchError(
+                f"Jira pagination exceeded MAX_PAGES={MAX_PAGES}"
+            )
 
     if console:
         console.print(f"  Jira: fetched {len(issues)} issues total.")

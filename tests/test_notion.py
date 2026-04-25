@@ -90,6 +90,25 @@ class TestFetchDatabasePages:
 
 
     @respx.mock
+    def test_pagination_repeated_cursor_raises(self, pages_fixture):
+        """Buggy server returning the same next_cursor must not infinite-loop."""
+        from src.sources.notion import NotionFetchError
+        page = {
+            "results": pages_fixture["results"][:1],
+            "has_more": True,
+            "next_cursor": "stuck",
+        }
+        respx.post(f"{API_BASE}/databases/db-abc-123/query").mock(
+            side_effect=[
+                httpx.Response(200, json=page),
+                httpx.Response(200, json=page),
+            ]
+        )
+        with httpx.Client(headers={"Authorization": "Bearer test"}) as client:
+            with pytest.raises(NotionFetchError, match="repeated cursor"):
+                _fetch_database_pages(client, "db-abc-123")
+
+    @respx.mock
     def test_has_more_true_but_no_cursor_terminates(self, pages_fixture):
         """Guard against infinite loop when API returns has_more=True but no cursor."""
         broken_response = {

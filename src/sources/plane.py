@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 from src.sources._http import (
     SourceAuthError, SourceFetchError,
-    request_with_retry, DEFAULT_TIMEOUT,
+    request_with_retry, DEFAULT_TIMEOUT, MAX_PAGES,
 )
 
 
@@ -69,7 +69,8 @@ def _paginate(client: httpx.Client, url: str, params: dict | None = None) -> lis
     params.setdefault("per_page", _PER_PAGE)
     out: list[dict] = []
     cursor: str | None = None
-    while True:
+    seen_cursors: set[str] = set()
+    for _ in range(MAX_PAGES):
         page_params = dict(params)
         if cursor:
             page_params["cursor"] = cursor
@@ -81,9 +82,18 @@ def _paginate(client: httpx.Client, url: str, params: dict | None = None) -> lis
         if not isinstance(body, dict):
             return out
         out.extend(body.get("results", []))
-        if not body.get("next_page_results") or not body.get("next_cursor"):
+        next_cursor = body.get("next_cursor")
+        if not body.get("next_page_results") or not next_cursor:
             return out
-        cursor = body["next_cursor"]
+        if next_cursor in seen_cursors:
+            raise PlaneFetchError(
+                f"Plane returned a repeated cursor {next_cursor!r}"
+            )
+        seen_cursors.add(next_cursor)
+        cursor = next_cursor
+    raise PlaneFetchError(
+        f"Plane pagination exceeded MAX_PAGES={MAX_PAGES}"
+    )
 
 
 def pull(config: dict, console: Console | None = None) -> list[dict]:

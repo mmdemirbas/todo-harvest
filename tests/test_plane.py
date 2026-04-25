@@ -158,6 +158,35 @@ class TestPull:
         assert len(issues) == 3
 
 
+    @respx.mock
+    def test_pagination_cycle_raises(
+        self, projects_fixture, states_fixture, labels_fixture, issues_fixture
+    ):
+        """Plane returning a repeated cursor must not infinite-loop."""
+        respx.get(f"{WS_URL}/projects/").mock(
+            return_value=httpx.Response(200, json=projects_fixture)
+        )
+        _mock_project_endpoints(
+            "proj-uuid-2", _empty_page(), _empty_page(), _empty_page()
+        )
+        respx.get(f"{WS_URL}/projects/proj-uuid-1/states/").mock(
+            return_value=httpx.Response(200, json=states_fixture)
+        )
+        respx.get(f"{WS_URL}/projects/proj-uuid-1/labels/").mock(
+            return_value=httpx.Response(200, json=labels_fixture)
+        )
+        page = {
+            "results": issues_fixture["results"][:1],
+            "next_cursor": "stuck",
+            "next_page_results": True,
+        }
+        respx.get(f"{WS_URL}/projects/proj-uuid-1/issues/").mock(
+            side_effect=[httpx.Response(200, json=page), httpx.Response(200, json=page)]
+        )
+        with pytest.raises(PlaneFetchError, match="repeated cursor"):
+            pull(PLANE_CONFIG)
+
+
 class TestNormalizer:
     def test_maps_state_group_to_status(self):
         raw = {

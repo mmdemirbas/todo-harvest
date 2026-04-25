@@ -80,6 +80,39 @@ class TestFetchAll:
         assert route.call_count == 3
 
     @respx.mock
+    def test_pagination_cycle_raises(self, jira_fixture):
+        """Buggy server returning the same nextPageToken twice must not infinite-loop."""
+        page = {
+            "issues": [jira_fixture["issues"][0]],
+            "isLast": False,
+            "nextPageToken": "stuck",
+        }
+        route = respx.post(SEARCH_URL)
+        route.side_effect = [
+            httpx.Response(200, json=page),
+            httpx.Response(200, json=page),
+        ]
+        from src.sources.jira import JiraFetchError
+        with pytest.raises(JiraFetchError, match="repeated nextPageToken"):
+            pull(JIRA_CONFIG)
+
+    @respx.mock
+    def test_pagination_max_pages_raises(self, monkeypatch, jira_fixture):
+        """Monotonically advancing past MAX_PAGES must trigger the hard cap."""
+        import src.sources.jira as jira_mod
+        monkeypatch.setattr(jira_mod, "MAX_PAGES", 2)
+        route = respx.post(SEARCH_URL)
+        route.side_effect = [
+            httpx.Response(200, json={"issues": [jira_fixture["issues"][0]],
+                                       "isLast": False, "nextPageToken": "t1"}),
+            httpx.Response(200, json={"issues": [jira_fixture["issues"][1]],
+                                       "isLast": False, "nextPageToken": "t2"}),
+        ]
+        from src.sources.jira import JiraFetchError
+        with pytest.raises(JiraFetchError, match="exceeded MAX_PAGES"):
+            pull(JIRA_CONFIG)
+
+    @respx.mock
     def test_empty_result(self):
         respx.post(SEARCH_URL).mock(
             return_value=httpx.Response(200, json={

@@ -12,7 +12,7 @@ from rich.console import Console
 
 from src.sources._http import (
     SourceAuthError, SourceFetchError,
-    request_with_retry, DEFAULT_TIMEOUT,
+    request_with_retry, DEFAULT_TIMEOUT, MAX_PAGES,
 )
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
@@ -132,18 +132,34 @@ def _save_cache(cache: msal.SerializableTokenCache, cache_path: Path) -> None:
         raise
 
 
-def _fetch_lists(client: httpx.Client) -> list[dict]:
-    """Fetch all To Do task lists."""
-    lists: list[dict] = []
-    url: str | None = f"{GRAPH_BASE}/me/todo/lists"
-
-    while url:
+def _paginate_graph(client: httpx.Client, initial_url: str) -> list[dict]:
+    """Walk MS Graph @odata.nextLink pagination with cycle and max-page guards."""
+    out: list[dict] = []
+    url: str | None = initial_url
+    seen: set[str] = set()
+    for _ in range(MAX_PAGES):
+        if url is None:
+            return out
         resp = _request(client, "GET", url)
         data = resp.json()
-        lists.extend(data.get("value", []))
-        url = data.get("@odata.nextLink")
+        out.extend(data.get("value", []))
+        next_url = data.get("@odata.nextLink")
+        if not next_url:
+            return out
+        if next_url in seen:
+            raise MstodoFetchError(
+                f"MS Graph returned a repeated nextLink {next_url!r}"
+            )
+        seen.add(next_url)
+        url = next_url
+    raise MstodoFetchError(
+        f"MS Graph pagination exceeded MAX_PAGES={MAX_PAGES}"
+    )
 
-    return lists
+
+def _fetch_lists(client: httpx.Client) -> list[dict]:
+    """Fetch all To Do task lists."""
+    return _paginate_graph(client, f"{GRAPH_BASE}/me/todo/lists")
 
 
 def _fetch_tasks_for_list(client: httpx.Client, list_id: str) -> list[dict]:
@@ -151,19 +167,10 @@ def _fetch_tasks_for_list(client: httpx.Client, list_id: str) -> list[dict]:
 
     Expands checklistItems (steps) inline to avoid per-task API calls.
     """
-    tasks: list[dict] = []
-    url: str | None = (
-        f"{GRAPH_BASE}/me/todo/lists/{list_id}/tasks"
-        "?$expand=checklistItems"
+    return _paginate_graph(
+        client,
+        f"{GRAPH_BASE}/me/todo/lists/{list_id}/tasks?$expand=checklistItems",
     )
-
-    while url:
-        resp = _request(client, "GET", url)
-        data = resp.json()
-        tasks.extend(data.get("value", []))
-        url = data.get("@odata.nextLink")
-
-    return tasks
 
 
 def pull(config: dict, console: Console | None = None) -> list[dict]:
