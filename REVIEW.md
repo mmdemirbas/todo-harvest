@@ -59,10 +59,14 @@ Pinned `[tool.setuptools].packages = ["src", "src.sources"]` so setuptools doesn
 
 ## Findings deferred (not actioned)
 
-- **Plane URL uses UUID, not sequence_id** — possibly wrong, but Plane's URL format depends on version. Needs a real Plane instance to verify. Deferred per user (Plane not priority).
-- **`json.dump(..., default=str)` silent type coercion** — only affects `raw` field and only if a source returns non-JSON-serializable types. Currently no source does.
-- **`_merge_fields` uses item-level timestamp for all fields** — design vs. code mismatch. Documented in CLAUDE.md as "field-by-field" but is actually item-granularity. Real fix requires per-field timestamp columns in mapping.db.
+- **Plane URL uses UUID, not sequence_id** — Plane's web URL format varies by version (UUID-based vs identifier+sequence_id). Needs a real Plane instance to verify and fix correctly. Deferred per user (Plane not priority).
 - **Vikunja: no "cancelled" state** — Vikunja v2.3 only has `done` boolean. Pulled cancelled tasks don't exist; pushed cancelled tasks become `done=true` (one-way). Documented in `_VIKUNJA_STATUS_TO_BOOL` already.
+
+## Findings since shipped
+
+- **`json.dump(..., default=str)` silent type coercion** — removed in `b1bb4d1`. Now raises `TypeError` on non-serializable values instead of one-shot string coercion that drifts the schema.
+- **`_merge_fields` item-level timestamp** — replaced with per-field snapshot diff in `ffa87e2`. mapping.db now stores `last_pulled_fields` JSON; conflict resolution diffs current local and current source against the snapshot per field. Local-only edits and source-only edits both survive even when the other side touched something unrelated.
+- **P2-4 inspect column "Has completed" was misleading** — renamed to "Has comp date" in `5d8fe9b`. Actual done counts already in the Status distribution table.
 
 ## Healthy (verified clean)
 

@@ -43,9 +43,22 @@ All notable changes to this project are documented here. Format follows
   tolerates attributes containing `>`.
 - Tags lists are sorted+deduped in every normalizer so reordering on the
   source side does not register as a conflict on every pull.
+- `save_local_state` and `export_json` no longer use `default=str` —
+  any non-JSON-serializable value now raises `TypeError` instead of
+  silently coercing to a string and drifting the schema across cycles.
+- `inspect stats` column "Has completed" renamed to "Has comp date" —
+  the column counts the timestamp field's presence (which Notion never
+  emits even when `status=done`), not actual completed items. Use the
+  Status distribution table for done counts.
 
 ### Added
 
+- Per-field conflict resolution. mapping.db gains a `last_pulled_fields`
+  JSON snapshot column. `_merge_fields` diffs current local and current
+  source against the snapshot per field; local-only edits and
+  source-only edits both survive even when the other side made
+  unrelated changes. Legacy rows without a snapshot fall back to the
+  timestamp comparison until the first new pull populates them.
 - Pagination guards in every source: hard cap of 1000 pages per pull,
   plus cursor/token/`@odata.nextLink` cycle detection (Jira, Notion,
   Plane, MS Graph). A buggy or hostile API can no longer infinite-loop

@@ -75,13 +75,15 @@ Adding a new source:
 Fields are partitioned in `local_state.py`:
 
 - `_MERGE_FIELDS` — `title, description, status, priority, due_date, tags`. User-mutable; participate in conflict resolution.
-- `_SOURCE_AUTHORITATIVE_FIELDS` — `created_date, updated_date, completed_date, category, raw, url`. Source-owned metadata — direct-copied from the pulled item every merge (no conflict resolution; local cannot legitimately diverge).
+- `_SOURCE_AUTHORITATIVE_FIELDS` — `created_date, completed_date, category, raw, url`. Source-owned metadata — direct-copied from the pulled item every merge (no conflict resolution; local cannot legitimately diverge). `updated_date` is handled separately by `_merge_fields`: kept as local's value when any local edit survived, otherwise advanced to source's.
 
-`mapping.resolve_conflict` runs only on `_MERGE_FIELDS`. It parses ISO 8601 timestamps via `_parse_iso_ts` (handles trailing `Z`, `±HHMM` without colon, and >6-digit fractional seconds; naive timestamps treated as UTC; unparseable input falls through to source-wins). Then:
-- If only local changed after last sync → local wins
-- If only source changed after last sync → source wins
-- If both changed → source wins (prefer fresh external data)
-- If no timestamps → source wins
+Per-field diff against the last pulled snapshot:
+
+- `mapping.db` stores `last_pulled_fields` (JSON) — a per-row snapshot of source values for the merge fields as of the previous pull.
+- For each merge field: `local_changed = local_val != snapshot[field]`, `source_changed = source_val != snapshot[field]`. Only the side that actually changed since last pull wins; if both changed (true conflict) source wins.
+- The snapshot is refreshed on every upsert (created/updated/skipped paths all write the new source values), so the next cycle has accurate baselines.
+
+Legacy rows without a snapshot (pre-migration data) fall back to the timestamp comparison: `mapping.resolve_conflict` parses ISO 8601 via `_parse_iso_ts` (tolerates trailing `Z`, `±HHMM` without colon, >6-digit fractional seconds; naive timestamps treated as UTC; unparseable input falls through to source-wins). The first pull touching a legacy row populates the snapshot, so all future cycles use the per-field path.
 
 Tags lists are sorted+deduped in normalizers so order differences don't trigger false conflicts.
 
@@ -147,4 +149,3 @@ Config maps override built-in maps; unmapped values fall through to built-in log
 - Notion page content (blocks) not fetched — only database properties (would require N API calls for N pages)
 - Plane push writes only title, description_html, priority, and target_date. State (status) and labels are not synced — new issues land in the project's default state, and updates never change state or labels.
 - Vikunja has no "cancelled" state — only `done` boolean. Both `status=done` and `status=cancelled` push as `done=true`; pull only emits `done`/`todo`.
-- `_merge_fields` uses one item-level `updated_date` for every field's conflict-resolution input — granularity is item, not field, despite the four-rule description above.
