@@ -15,9 +15,11 @@ from src.sources.plane import (
     pull,
     push,
     _to_plane_payload,
+    migrate_legacy_mappings,
     PlaneAuthError,
     PlaneFetchError,
 )
+from src.mapping import SyncMapping
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -208,12 +210,18 @@ class TestNormalizer:
         cfg = {"status_map": {"Needs Review": "todo"}}
         assert normalize_plane(raw, cfg)["status"] == "todo"
 
-    def test_id_uses_project_and_sequence(self):
+    def test_id_uses_project_and_uuid(self):
+        """Stored id must address the issue via the API UUID so push can PATCH it,
+        not the sequence_id (which the API doesn't accept as a route param)."""
         raw = {
             "id": "issue-uuid", "sequence_id": 42, "name": "t", "priority": "none",
             "_project_id": "proj-1", "_state_group": "unstarted",
         }
-        assert normalize_plane(raw)["id"] == "plane-proj-1-42"
+        assert normalize_plane(raw)["id"] == "plane-proj-1:issue-uuid"
+
+    def test_id_falls_back_to_uuid_only_without_project(self):
+        raw = {"id": "issue-uuid", "sequence_id": 42, "name": "t", "priority": "none"}
+        assert normalize_plane(raw)["id"] == "plane-issue-uuid"
 
 
 class TestPushPayload:
@@ -323,3 +331,80 @@ class TestPush:
         ]
         result = push(config, tasks, mapping=mapping)
         assert result["created"] == 1
+
+
+class TestMigrateLegacyMappings:
+    def test_migrates_hyphen_to_colon_uuid(self, tmp_path):
+        with SyncMapping(tmp_path / "m.db") as m:
+            m.upsert("lid-1", "plane", "proj-1-42")  # legacy: hyphen + sequence_id
+            raw = [{
+                "id": "uuid-aaa",
+                "sequence_id": 42,
+                "_project_id": "proj-1",
+            }]
+            migrate_legacy_mappings(m, raw)
+            assert m.get_local_id("plane", "proj-1-42") is None
+            assert m.get_local_id("plane", "proj-1:uuid-aaa") == "lid-1"
+
+    def test_idempotent_when_already_migrated(self, tmp_path):
+        with SyncMapping(tmp_path / "m.db") as m:
+            m.upsert("lid-1", "plane", "proj-1:uuid-aaa")
+            raw = [{"id": "uuid-aaa", "sequence_id": 42, "_project_id": "proj-1"}]
+            migrate_legacy_mappings(m, raw)
+            assert m.get_local_id("plane", "proj-1:uuid-aaa") == "lid-1"
+
+    def test_skips_when_modern_already_present(self, tmp_path):
+        """If both legacy and modern rows exist, leave both alone (don't risk data loss)."""
+        with SyncMapping(tmp_path / "m.db") as m:
+            m.upsert("lid-old", "plane", "proj-1-42")
+            m.upsert("lid-new", "plane", "proj-1:uuid-aaa")
+            raw = [{"id": "uuid-aaa", "sequence_id": 42, "_project_id": "proj-1"}]
+            migrate_legacy_mappings(m, raw)
+            assert m.get_local_id("plane", "proj-1-42") == "lid-old"
+            assert m.get_local_id("plane", "proj-1:uuid-aaa") == "lid-new"
+
+    def test_skips_when_no_legacy_row(self, tmp_path):
+        with SyncMapping(tmp_path / "m.db") as m:
+            raw = [{"id": "uuid-aaa", "sequence_id": 42, "_project_id": "proj-1"}]
+            migrate_legacy_mappings(m, raw)  # no exception
+            assert m.get_local_id("plane", "proj-1-42") is None
+            assert m.get_local_id("plane", "proj-1:uuid-aaa") is None
+
+    def test_skips_when_raw_missing_required_fields(self, tmp_path):
+        with SyncMapping(tmp_path / "m.db") as m:
+            m.upsert("lid-1", "plane", "proj-1-42")
+            raw = [
+                {"id": "uuid-aaa", "_project_id": "proj-1"},        # no sequence_id
+                {"sequence_id": 42, "_project_id": "proj-1"},        # no UUID
+                {"id": "uuid-aaa", "sequence_id": 42},               # no project_id
+            ]
+            migrate_legacy_mappings(m, raw)
+            assert m.get_local_id("plane", "proj-1-42") == "lid-1"
+
+
+class TestRelabelSourceId:
+    def test_renames_in_place(self, tmp_path):
+        with SyncMapping(tmp_path / "m.db") as m:
+            m.upsert("lid-1", "plane", "old-id")
+            m.relabel_source_id("plane", "old-id", "new-id")
+            assert m.get_local_id("plane", "old-id") is None
+            assert m.get_local_id("plane", "new-id") == "lid-1"
+
+    def test_noop_when_target_exists(self, tmp_path):
+        with SyncMapping(tmp_path / "m.db") as m:
+            m.upsert("lid-1", "plane", "old-id")
+            m.upsert("lid-2", "plane", "new-id")
+            m.relabel_source_id("plane", "old-id", "new-id")
+            assert m.get_local_id("plane", "old-id") == "lid-1"
+            assert m.get_local_id("plane", "new-id") == "lid-2"
+
+    def test_noop_when_source_missing(self, tmp_path):
+        with SyncMapping(tmp_path / "m.db") as m:
+            m.relabel_source_id("plane", "old-id", "new-id")  # no exception
+            assert m.get_local_id("plane", "new-id") is None
+
+    def test_noop_when_ids_equal(self, tmp_path):
+        with SyncMapping(tmp_path / "m.db") as m:
+            m.upsert("lid-1", "plane", "id-x")
+            m.relabel_source_id("plane", "id-x", "id-x")
+            assert m.get_local_id("plane", "id-x") == "lid-1"

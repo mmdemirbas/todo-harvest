@@ -591,7 +591,14 @@ def normalize_plane(raw: dict, source_config: dict | None = None) -> dict:
         "type": "project",
     }
 
-    id_suffix = f"{project_id}-{sequence_id}" if sequence_id is not None else str(issue_id)
+    # Use the API UUID (issue_id), not the human-readable sequence_id, so push
+    # can address the same record via /projects/{project_id}/issues/{UUID}.
+    # Older versions used "{project_id}-{sequence_id}" — see
+    # plane.migrate_legacy_mappings() for the one-shot upgrade path.
+    if project_id and issue_id:
+        id_suffix = f"{project_id}:{issue_id}"
+    else:
+        id_suffix = str(issue_id or "")
 
     return {
         "id": f"plane-{id_suffix}",

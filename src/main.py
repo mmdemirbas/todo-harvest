@@ -400,6 +400,9 @@ def _cmd_pull(config: dict, services: list[str]) -> int:
                 had_errors = True
                 continue
 
+            # Apply per-source mapping migrations (e.g. legacy id formats)
+            source_def.migrate(mapping, raw_items)
+
             # Normalize
             normalized = []
             for raw in raw_items:

@@ -265,6 +265,32 @@ def push(
     return {"created": created, "updated": updated, "skipped": skipped}
 
 
+def migrate_legacy_mappings(
+    mapping: "SyncMapping", raw_issues: list[dict]
+) -> None:
+    """Upgrade pre-fix mapping rows from 'project_id-sequence_id' to 'project_id:UUID'.
+
+    Older normalize_plane stored the human-readable sequence_id; push later
+    expected the API UUID and silently fell through to CREATE on every run,
+    duplicating issues. Walk the pulled raw issues, find any legacy mapping
+    rows for the same (project, sequence), and rewrite them to the UUID form.
+    Idempotent.
+    """
+    for issue in raw_issues:
+        project_id = issue.get("_project_id")
+        sequence_id = issue.get("sequence_id")
+        issue_uuid = issue.get("id")
+        if not (project_id and sequence_id is not None and issue_uuid):
+            continue
+        legacy = f"{project_id}-{sequence_id}"
+        modern = f"{project_id}:{issue_uuid}"
+        if legacy == modern:
+            continue
+        if mapping.get_local_id("plane", legacy) is None:
+            continue
+        mapping.relabel_source_id("plane", legacy, modern)
+
+
 _UNIFIED_PRIORITY_TO_PLANE = {
     "none": "none",
     "low": "low",

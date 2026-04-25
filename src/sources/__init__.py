@@ -73,6 +73,16 @@ class SourceDef:
         mod = self._load_normalizer()
         return getattr(mod, self._normalize_fn)(raw, source_config or {})
 
+    def migrate(self, mapping: Any, raw_items: list[dict]) -> None:
+        """Apply source-specific mapping-table migrations (legacy id formats etc).
+
+        No-op when the source module defines no `migrate_legacy_mappings`.
+        """
+        mod = self._load()
+        fn = getattr(mod, "migrate_legacy_mappings", None)
+        if fn is not None:
+            fn(mapping, raw_items)
+
 
 # The single source of truth for available sources.
 # To add a new source: add one entry here + create the module + add normalize function.

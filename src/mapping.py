@@ -153,6 +153,28 @@ class SyncMapping:
         )
         conn.commit()
 
+    def relabel_source_id(
+        self, source: str, old_source_id: str, new_source_id: str
+    ) -> None:
+        """Rename a row's source_id in place. Used by per-source migrations.
+
+        Skips when the old row doesn't exist, the new row already exists
+        (would violate UNIQUE), or the two ids are equal.
+        """
+        if old_source_id == new_source_id:
+            return
+        conn = self._connect()
+        if conn.execute(
+            "SELECT 1 FROM sync_map WHERE source = ? AND source_id = ?",
+            (source, new_source_id),
+        ).fetchone():
+            return
+        conn.execute(
+            "UPDATE sync_map SET source_id = ? WHERE source = ? AND source_id = ?",
+            (new_source_id, source, old_source_id),
+        )
+        conn.commit()
+
     def mark_synced(self, local_id: str, source: str) -> None:
         """Update last_synced_at to now for a (local_id, source) pair."""
         conn = self._connect()
