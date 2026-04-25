@@ -201,11 +201,25 @@ def _merge_fields(
     Returns (changed, conflict_count).
     A conflict is when both local and source differ and resolution picks a winner.
     """
+    from src.mapping import _parse_iso_ts
+
     last_synced = mapping.get_last_synced_at(local_id, source)
     last_pulled = mapping.get_last_pulled_fields(local_id, source)
     changed = False
     conflicts = 0
     local_won_any = False
+
+    # Pre-compute timestamp-based change flags for the legacy fallback path.
+    # Snapshot path computes per-field change flags inline below.
+    legacy_local_changed = False
+    legacy_source_changed = True
+    if last_pulled is None:
+        last_dt = _parse_iso_ts(last_synced)
+        local_dt = _parse_iso_ts(local_item.get("updated_date"))
+        source_dt = _parse_iso_ts(pulled_item.get("updated_date"))
+        if last_dt and local_dt and source_dt:
+            legacy_local_changed = local_dt > last_dt
+            legacy_source_changed = source_dt > last_dt
 
     for field in _MERGE_FIELDS:
         local_val = local_item.get(field)
@@ -217,33 +231,34 @@ def _merge_fields(
         if last_pulled is not None:
             # Per-field diff against the last pulled snapshot. Decouples
             # "did local edit field X" from "did source change field Y" —
-            # the timestamp-only fallback below conflates both into a
-            # single item-level updated_date and clobbers innocent fields.
+            # the timestamp fallback below conflates both into a single
+            # item-level updated_date and clobbers innocent fields.
             last_val = last_pulled.get(field)
             local_changed = local_val != last_val
             source_changed = source_val != last_val
-            if local_changed and not source_changed:
-                winner_val, winner = local_val, "local"
-            elif source_changed and not local_changed:
-                winner_val, winner = source_val, "source"
-            else:
-                # Both changed (or neither, which means stored snapshot is
-                # stale — both differ but neither matches the snapshot)
-                winner_val, winner = source_val, "source"
         else:
             # Legacy row with no snapshot (pre-migration, or first pull
-            # after the column was added). Fall back to the timestamp
-            # comparison; the snapshot we write below makes future cycles
-            # use the per-field path.
-            winner_val, winner = mapping.resolve_conflict(
-                field,
-                local_val, local_item.get("updated_date"),
-                source_val, pulled_item.get("updated_date"),
-                last_synced,
-            )
+            # after the column was added). All fields share the item-level
+            # timestamp comparison. The snapshot we write below makes
+            # future cycles use the per-field path.
+            local_changed = legacy_local_changed
+            source_changed = legacy_source_changed
 
-        # Count as conflict whenever values differ (resolution was needed)
-        conflicts += 1
+        if local_changed and not source_changed:
+            winner_val, winner = local_val, "local"
+        elif source_changed and not local_changed:
+            winner_val, winner = source_val, "source"
+        else:
+            # Both changed → real bilateral conflict (source wins by policy).
+            # Neither changed → snapshot is stale (or both timestamps unknown);
+            # source-wins is also the safe default.
+            winner_val, winner = source_val, "source"
+
+        # `conflicts` counts BILATERAL changes only — pure source-only or
+        # local-only updates are not conflicts. Pre-fix this counter fired
+        # on any field difference, inflating the metric on routine pulls.
+        if local_changed and source_changed:
+            conflicts += 1
 
         if winner_val != local_val:
             local_item[field] = winner_val

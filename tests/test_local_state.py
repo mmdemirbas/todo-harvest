@@ -226,19 +226,46 @@ class TestMergePulledItems:
         assert local[0]["title"] == "Restored"
         assert local[0]["local_id"] == lid
 
-    def test_conflict_counter_incremented(self, mapping):
-        """When source and local differ on a field, conflicts stat counts it."""
+    def test_conflict_counter_counts_bilateral_changes_only(self, mapping):
+        """conflicts counts BILATERAL changes (both sides moved away from the
+        last-pulled snapshot), not any field difference. Source-only edits
+        are routine, not conflicts."""
         lid = mapping.generate_local_id()
-        mapping.upsert(lid, "jira", "PROJ-1")
+        # Snapshot reflects the prior pull. Local and source both diverge.
+        mapping.upsert(lid, "jira", "PROJ-1", last_pulled_fields={
+            "title": "Original", "status": "todo", "priority": "low",
+            "description": None, "due_date": None, "tags": [],
+        })
 
-        local_item = _make_item("jira", "PROJ-1", title="Local Title", local_id=lid,
-                                status="todo", priority="low")
-        pulled_item = _make_item("jira", "PROJ-1", title="Source Title",
-                                 status="done", priority="high")
+        local_item = _make_item("jira", "PROJ-1", title="LocalTitle", local_id=lid,
+                                status="in_progress", priority="low")
+        pulled_item = _make_item("jira", "PROJ-1", title="SourceTitle",
+                                 status="todo", priority="high")
+        # title:    local=LocalTitle vs source=SourceTitle vs snap=Original  → bilateral
+        # status:   local=in_progress vs source=todo       vs snap=todo     → local-only
+        # priority: local=low        vs source=high        vs snap=low      → source-only
 
         local, stats = merge_pulled_items([local_item], [pulled_item], mapping, "jira")
-        assert stats["conflicts"] >= 3  # title + status + priority differ
+        assert stats["conflicts"] == 1  # title only
         assert stats["updated"] == 1
+
+    def test_conflicts_zero_for_pure_source_only_changes(self, mapping):
+        """Routine pull where source updated 3 fields, local unchanged: zero
+        conflicts. Pre-fix this reported 3 — eroded the metric."""
+        lid = mapping.generate_local_id()
+        mapping.upsert(lid, "jira", "PROJ-1", last_pulled_fields={
+            "title": "Original", "status": "todo", "priority": "low",
+            "description": None, "due_date": None, "tags": [],
+        })
+        local_item = _make_item("jira", "PROJ-1", title="Original", local_id=lid,
+                                status="todo", priority="low")
+        pulled_item = _make_item("jira", "PROJ-1", title="NewSourceTitle",
+                                 status="done", priority="high")
+        local, stats = merge_pulled_items([local_item], [pulled_item], mapping, "jira")
+        assert stats["conflicts"] == 0
+        assert local[0]["title"] == "NewSourceTitle"
+        assert local[0]["status"] == "done"
+        assert local[0]["priority"] == "high"
 
     def test_empty_pull_returns_local_unchanged(self, mapping):
         local_items = [_make_item("jira", "PROJ-1", local_id="lid-1")]
@@ -275,7 +302,14 @@ class TestMergePulledItems:
         assert len(local) == 2
 
     def test_merge_writes_atomically_per_pull(self, tmp_path, monkeypatch):
-        """If merge raises mid-batch, no mapping rows survive — full rollback."""
+        """If merge raises mid-batch, no mapping rows survive — full rollback.
+
+        Assumption: every item is new and exactly one upsert fires per item
+        (creation path). If this test gains pre-existing items later, the skip
+        path also calls upsert (added in ffa87e2 to refresh the snapshot), so
+        the call count formula becomes len(new) + len(skipped) and the 'third
+        call' may target a different item than intended.
+        """
         from src.mapping import SyncMapping
         db = tmp_path / "rollback.db"
         with SyncMapping(db) as m:
@@ -284,7 +318,7 @@ class TestMergePulledItems:
                 _make_item("jira", "PROJ-2"),
                 _make_item("jira", "PROJ-3"),
             ]
-            # Make the third upsert blow up
+            # Make the third upsert blow up — relies on the all-new assumption above.
             calls = {"n": 0}
             real_upsert = m.upsert
 
@@ -401,6 +435,31 @@ class TestMergePulledItems:
         # resolve_conflict — overwriting it here would silently flip future
         # cycles to source-wins.
         assert local[0]["updated_date"] == "2024-01-01T11:00:00Z"
+
+    def test_snapshot_stores_source_values_not_merged_result(self, mapping):
+        """The snapshot must reflect what source emitted, not what the merge
+        produced. If snapshot were built from local_item, per-field diff on
+        the NEXT pull would be wrong (would compare against local-won values
+        instead of source's last view), and the bug would only surface on a
+        third pull."""
+        first_pulled = [_make_item(
+            "vikunja", "1", title="SourceA", local_id="",
+            updated_date="2024-01-01T09:00:00Z",
+        )]
+        local, _ = merge_pulled_items([], first_pulled, mapping, "vikunja")
+        lid = local[0]["local_id"]
+        local[0]["title"] = "MyEdit"  # local edit between pulls
+
+        second_pulled = [_make_item(
+            "vikunja", "1", title="SourceB", local_id="",
+            updated_date="2024-02-01T09:00:00Z",
+        )]
+        merge_pulled_items(local, second_pulled, mapping, "vikunja")
+
+        snap = mapping.get_last_pulled_fields(lid, "vikunja")
+        # Must be source's just-pulled value, NOT the merged "MyEdit"
+        assert snap is not None
+        assert snap["title"] == "SourceB"
 
     def test_per_field_diff_preserves_independent_local_and_source_edits(self, mapping):
         """The original bug: timestamp-only resolution declared all fields

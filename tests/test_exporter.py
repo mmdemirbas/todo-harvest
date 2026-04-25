@@ -137,6 +137,16 @@ class TestExportCsv:
             ids = [row["id"] for row in reader]
         assert ids == ["jira-PROJ-1", "jira-PROJ-2", "notion-page-001"]
 
+    def test_non_serializable_value_raises_loudly(self, tmp_path, sample_items):
+        """default=str was removed: any non-JSON-serializable value (e.g. a
+        stray datetime) must raise TypeError instead of one-shot string
+        coercion that drifts the schema. Mirrors the save_local_state test."""
+        from datetime import datetime
+        sample_items[0]["raw"]["injected"] = datetime(2024, 1, 1)
+        path = tmp_path / "test.json"
+        with pytest.raises(TypeError):
+            export_json(sample_items, path)
+
     def test_completed_date_written(self, tmp_path, sample_items):
         """CSV_COLUMNS declares completed_date — make sure the row dict
         actually populates it."""
