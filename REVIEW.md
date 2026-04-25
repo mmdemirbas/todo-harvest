@@ -67,3 +67,42 @@ Pinned `[tool.setuptools].packages = ["src", "src.sources"]` so setuptools doesn
 ## Healthy (verified clean)
 
 `yaml.safe_load`; SQLite parameterized everywhere; MSAL cache 0o700/0o600; no `verify=False`; no `eval`/`exec`/`shell=True`; auth errors don't trigger retries; tempfile lives next to final path (atomic-rename safe); `REGISTRY` is the single source of truth — `config.SOURCES` derives from it; `mapping.py` has no HTTP imports.
+
+---
+
+## Round 3 — post-fix deep review (2026-04-25)
+
+Fresh review against the 14-fix branch. New issues only — does not repeat already-shipped or already-deferred items.
+
+### Critical
+
+**C1 — `_SOURCE_AUTHORITATIVE_FIELDS` clobbers `local_item["updated_date"]` before `upsert` reads it; local-wins lasts exactly one pull cycle**
+`src/local_state.py` `_merge_fields` writes `local_item["updated_date"] = pulled["updated_date"]` because `updated_date` is in `_SOURCE_AUTHORITATIVE_FIELDS`. Then `merge_pulled_items` calls `mapping.upsert(..., local_updated_at=local_item.get("updated_date"))` — which is now the source's older timestamp, not the actual local edit time. On the NEXT pull, `local_dt` ≤ `last_synced_at`, so `local_changed = False`; source wins and overwrites the local edit. Local edits visible for one cycle, then silently reverted.
+**Fix:** Don't overwrite `updated_date` when local won any field. Compute `local_won_any` in the merge loop; only adopt source's `updated_date` when `local_won_any is False`.
+**Confidence:** 95%
+
+### P2 — correctness
+
+**P2-1 — `SourceDef.push` `except TypeError` swallows real bugs and silently drops `mapping=`**
+`src/sources/__init__.py:66-70` retries `push()` without `mapping=` if any `TypeError` is raised — including a `TypeError` raised from inside push for an unrelated reason. The retry then runs without mapping, so newly created items aren't recorded in `mapping.db` and become orphans on the next push.
+**Fix:** Inspect the push function's signature once at module-load time (`inspect.signature`) and remember whether it accepts `mapping=`. Drop the broad except.
+
+**P2-2 — `_inspect_stats` lex-compares mixed-format ISO timestamps for date range display**
+`src/main.py` `_inspect_stats` uses `min(created)`/`max(updated)` on raw ISO strings. Same bug as the original `resolve_conflict` issue (`Z` vs `+0000` sorts inconsistently). Display-only — produces wrong "earliest/latest" dates when sources are mixed.
+**Fix:** Compare the `[:10]` (YYYY-MM-DD) prefix, or parse via `_parse_iso_ts` from `mapping.py`.
+
+**P2-3 — `migrate_legacy_mappings` runs OUTSIDE `transaction()` — N fsyncs on first migration**
+`src/main.py` `_cmd_pull` calls `source_def.migrate(mapping, raw_items)` before the `with mapping.transaction():` block in `merge_pulled_items`. Each `relabel_source_id` issues its own commit. For a 500-issue Plane workspace migrating from legacy IDs, that's ~500 fsyncs vs 1.
+**Fix:** Wrap the migrate call site (or the body of `SourceDef.migrate`) in `mapping.transaction()`.
+
+**P2-4 — `status` and `completed_date` can drift apart with no repair path**
+`_SOURCE_AUTHORITATIVE_FIELDS` always copies `completed_date` from source without checking against `status`. Notion always emits `completed_date=None` even when `status=done`; older Vikunja tasks may have `done=true` but `done_at` zero-date sentinel (which normalizes to None). Result: `{status: done, completed_date: null}` persists. `_inspect_stats` then mis-reports completion coverage.
+**Fix (optional, design call):** post-merge, if `status == "done"` and `completed_date is None`, fall back to `updated_date`. If `status != "done"` and `completed_date` is set, clear it. Or document as expected.
+
+### Test gaps
+
+- **T1** — `TestUnifiedSchema` parametrize at `tests/test_normalizer.py` excludes `"plane"`. Schema conformance for `normalize_plane` is uncovered.
+- **T2** — No test that `SourceDef.push` lets a real `TypeError` from inside push propagate (current code silently swallows it via the retry path).
+- **T3** — No test for `_inspect_stats` date range with mixed-format ISO inputs.
+- **T4** — No regression test for C1: assert `mapping.db.local_updated_at` keeps the local edit time after a local-wins merge.
+- **T5** — No test that migration write count is bounded (one transaction commit), to lock in the P2-3 fix.
