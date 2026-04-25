@@ -156,9 +156,14 @@ _MERGE_FIELDS = ("title", "description", "status", "priority", "due_date", "tags
 # Source-owned metadata: copied straight from the pulled item. The local copy
 # cannot legitimately diverge from source for these (they're set by the remote
 # system on its own clock), so source always wins.
+#
+# `updated_date` is deliberately NOT in this list — it's handled below in
+# _merge_fields. Overwriting local's updated_date with source's older value
+# after a local-wins conflict would silently revert the local edit on the
+# next pull cycle (the upsert below would record local_updated_at as the
+# source ts, and resolve_conflict would then see local as "unchanged").
 _SOURCE_AUTHORITATIVE_FIELDS = (
     "created_date",
-    "updated_date",
     "completed_date",
     "category",
     "raw",
@@ -181,6 +186,7 @@ def _merge_fields(
     last_synced = mapping.get_last_synced_at(local_id, source)
     changed = False
     conflicts = 0
+    local_won_any = False
 
     for field in _MERGE_FIELDS:
         local_val = local_item.get(field)
@@ -202,6 +208,8 @@ def _merge_fields(
         if winner_val != local_val:
             local_item[field] = winner_val
             changed = True
+        if winner == "local":
+            local_won_any = True
 
     for field in _SOURCE_AUTHORITATIVE_FIELDS:
         if field not in pulled_item:
@@ -209,6 +217,15 @@ def _merge_fields(
         new_val = pulled_item.get(field)
         if new_val != local_item.get(field):
             local_item[field] = new_val
+            changed = True
+
+    # updated_date: keep local's if any local edit survived; otherwise adopt
+    # source's. See _SOURCE_AUTHORITATIVE_FIELDS comment for the bug this
+    # avoids.
+    if not local_won_any:
+        new_updated = pulled_item.get("updated_date")
+        if new_updated is not None and new_updated != local_item.get("updated_date"):
+            local_item["updated_date"] = new_updated
             changed = True
 
     return changed, conflicts

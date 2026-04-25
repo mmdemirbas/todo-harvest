@@ -353,6 +353,61 @@ class TestMergePulledItems:
         local, _ = merge_pulled_items([local_item], [pulled], mapping, "vikunja")
         assert local[0]["updated_date"] == "2024-02-15T00:00:00Z"
 
+    def test_local_wins_preserves_local_updated_date(self, mapping):
+        """When local wins a field conflict, local_item.updated_date must NOT
+        be overwritten by source's older value — otherwise next pull would see
+        local as 'unchanged since sync' and silently revert the local edit."""
+        lid = mapping.generate_local_id()
+        mapping.upsert(
+            lid, "vikunja", "1",
+            source_updated_at="2024-01-01T09:00:00Z",
+            local_updated_at="2024-01-01T09:00:00Z",
+        )
+        conn = mapping._connect()
+        conn.execute(
+            "UPDATE sync_map SET last_synced_at = ? WHERE local_id = ? AND source = ?",
+            ("2024-01-01T10:00:00Z", lid, "vikunja"),
+        )
+        conn.commit()
+
+        local_item = _make_item(
+            "vikunja", "1", title="LocalEdit", local_id=lid,
+            updated_date="2024-01-01T11:00:00Z",  # post-sync local edit
+        )
+        pulled = _make_item(
+            "vikunja", "1", title="OldSourceTitle",
+            updated_date="2024-01-01T09:00:00Z",  # source unchanged
+        )
+
+        local, _ = merge_pulled_items([local_item], [pulled], mapping, "vikunja")
+
+        assert local[0]["title"] == "LocalEdit"
+        # The fix: in-item updated_date must stay at the local edit time.
+        # The next pull re-reads this from todos.json and feeds it to
+        # resolve_conflict — overwriting it here would silently flip future
+        # cycles to source-wins.
+        assert local[0]["updated_date"] == "2024-01-01T11:00:00Z"
+
+    def test_no_winners_advances_updated_date_to_source(self, mapping):
+        """When source wins (or no real conflict), in-item updated_date
+        adopts source's — needed so the next cycle's last_synced comparison
+        works correctly."""
+        lid = mapping.generate_local_id()
+        mapping.upsert(lid, "vikunja", "1", source_updated_at="2024-01-01T00:00:00Z")
+        mapping.mark_synced(lid, "vikunja")
+
+        local_item = _make_item(
+            "vikunja", "1", title="Old", local_id=lid,
+            updated_date="2024-01-01T00:00:00Z",
+        )
+        pulled = _make_item(
+            "vikunja", "1", title="New",  # source changed
+            updated_date="2024-02-15T00:00:00Z",
+        )
+        local, _ = merge_pulled_items([local_item], [pulled], mapping, "vikunja")
+        assert local[0]["title"] == "New"  # source won
+        assert local[0]["updated_date"] == "2024-02-15T00:00:00Z"
+
     def test_corrupt_json_raises(self, tmp_path):
         """Corrupt state file must not be silently swallowed."""
         path = tmp_path / "bad.json"
