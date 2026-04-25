@@ -103,6 +103,11 @@ def merge_pulled_items(
             )
             local_id = mapping.get_local_id(source, source_id)
 
+            # Snapshot of source values for THIS pull. Stored on every upsert
+            # so the next pull can do per-field diff (not item-level timestamp
+            # comparisons that conflate unrelated edits).
+            new_snapshot = {f: pulled.get(f) for f in _MERGE_FIELDS}
+
             if local_id is None:
                 # New item — assign local_id, add to local state
                 local_id = mapping.generate_local_id()
@@ -111,6 +116,7 @@ def merge_pulled_items(
                     local_id, source, source_id,
                     source_updated_at=pulled.get("updated_date"),
                     local_updated_at=pulled.get("updated_date"),
+                    last_pulled_fields=new_snapshot,
                 )
                 mapping.mark_synced(local_id, source)
                 local_by_id[local_id] = pulled
@@ -126,6 +132,7 @@ def merge_pulled_items(
                         local_id, source, source_id,
                         source_updated_at=pulled.get("updated_date"),
                         local_updated_at=pulled.get("updated_date"),
+                        last_pulled_fields=new_snapshot,
                     )
                     mapping.mark_synced(local_id, source)
                     local_by_id[local_id] = pulled
@@ -139,10 +146,21 @@ def merge_pulled_items(
                             local_id, source, source_id,
                             source_updated_at=pulled.get("updated_date"),
                             local_updated_at=local_item.get("updated_date"),
+                            last_pulled_fields=new_snapshot,
                         )
                         mapping.mark_synced(local_id, source)
                         stats["updated"] += 1
                     else:
+                        # Even on no-change, refresh the snapshot — source's
+                        # value may equal local's now but on the next pull
+                        # we still need to know "this is what source looked
+                        # like as of now" for the per-field diff.
+                        mapping.upsert(
+                            local_id, source, source_id,
+                            source_updated_at=pulled.get("updated_date"),
+                            local_updated_at=local_item.get("updated_date"),
+                            last_pulled_fields=new_snapshot,
+                        )
                         mapping.mark_synced(local_id, source)
                         stats["skipped"] += 1
 
@@ -184,6 +202,7 @@ def _merge_fields(
     A conflict is when both local and source differ and resolution picks a winner.
     """
     last_synced = mapping.get_last_synced_at(local_id, source)
+    last_pulled = mapping.get_last_pulled_fields(local_id, source)
     changed = False
     conflicts = 0
     local_won_any = False
@@ -195,12 +214,33 @@ def _merge_fields(
         if local_val == source_val:
             continue
 
-        winner_val, winner = mapping.resolve_conflict(
-            field,
-            local_val, local_item.get("updated_date"),
-            source_val, pulled_item.get("updated_date"),
-            last_synced,
-        )
+        if last_pulled is not None:
+            # Per-field diff against the last pulled snapshot. Decouples
+            # "did local edit field X" from "did source change field Y" —
+            # the timestamp-only fallback below conflates both into a
+            # single item-level updated_date and clobbers innocent fields.
+            last_val = last_pulled.get(field)
+            local_changed = local_val != last_val
+            source_changed = source_val != last_val
+            if local_changed and not source_changed:
+                winner_val, winner = local_val, "local"
+            elif source_changed and not local_changed:
+                winner_val, winner = source_val, "source"
+            else:
+                # Both changed (or neither, which means stored snapshot is
+                # stale — both differ but neither matches the snapshot)
+                winner_val, winner = source_val, "source"
+        else:
+            # Legacy row with no snapshot (pre-migration, or first pull
+            # after the column was added). Fall back to the timestamp
+            # comparison; the snapshot we write below makes future cycles
+            # use the per-field path.
+            winner_val, winner = mapping.resolve_conflict(
+                field,
+                local_val, local_item.get("updated_date"),
+                source_val, pulled_item.get("updated_date"),
+                last_synced,
+            )
 
         # Count as conflict whenever values differ (resolution was needed)
         conflicts += 1

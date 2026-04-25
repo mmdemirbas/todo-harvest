@@ -6,6 +6,7 @@ conflict resolution, and a sync log for auditability.
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 import uuid
@@ -81,9 +82,17 @@ class SyncMapping:
                 last_synced_at      TEXT,
                 local_updated_at    TEXT,
                 source_updated_at   TEXT,
+                last_pulled_fields  TEXT,
                 UNIQUE(source, source_id)
             )
         """)
+        # In-place migration for pre-existing DBs: ALTER TABLE ADD COLUMN if
+        # the JSON snapshot column wasn't there originally.
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(sync_map)")}
+        if "last_pulled_fields" not in cols:
+            conn.execute(
+                "ALTER TABLE sync_map ADD COLUMN last_pulled_fields TEXT"
+            )
         conn.execute("""
             CREATE TABLE IF NOT EXISTS sync_log (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -166,21 +175,69 @@ class SyncMapping:
         source_id: str,
         source_updated_at: str | None = None,
         local_updated_at: str | None = None,
+        last_pulled_fields: dict | None = None,
     ) -> None:
-        """Insert or update a mapping entry."""
+        """Insert or update a mapping entry.
+
+        `last_pulled_fields` is a snapshot of the values pulled in this round
+        for the merge fields. It enables per-field conflict detection on the
+        next pull (vs. the timestamp-only approach which conflates all fields).
+        Pass None to leave the existing snapshot unchanged.
+        """
         conn = self._connect()
-        conn.execute(
-            """
-            INSERT INTO sync_map (local_id, source, source_id, source_updated_at, local_updated_at)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(source, source_id) DO UPDATE SET
-                local_id = excluded.local_id,
-                source_updated_at = excluded.source_updated_at,
-                local_updated_at = excluded.local_updated_at
-            """,
-            (local_id, source, source_id, source_updated_at, local_updated_at),
+        snapshot = (
+            json.dumps(last_pulled_fields, sort_keys=True, ensure_ascii=False)
+            if last_pulled_fields is not None
+            else None
         )
+        if last_pulled_fields is None:
+            conn.execute(
+                """
+                INSERT INTO sync_map (local_id, source, source_id, source_updated_at, local_updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(source, source_id) DO UPDATE SET
+                    local_id = excluded.local_id,
+                    source_updated_at = excluded.source_updated_at,
+                    local_updated_at = excluded.local_updated_at
+                """,
+                (local_id, source, source_id, source_updated_at, local_updated_at),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO sync_map (local_id, source, source_id, source_updated_at, local_updated_at, last_pulled_fields)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(source, source_id) DO UPDATE SET
+                    local_id = excluded.local_id,
+                    source_updated_at = excluded.source_updated_at,
+                    local_updated_at = excluded.local_updated_at,
+                    last_pulled_fields = excluded.last_pulled_fields
+                """,
+                (local_id, source, source_id, source_updated_at, local_updated_at, snapshot),
+            )
         self._commit()
+
+    def get_last_pulled_fields(
+        self, local_id: str, source: str
+    ) -> dict | None:
+        """Return the per-field snapshot of source values from the last pull.
+
+        Returns None when the row has never been seen with a snapshot
+        (legacy pre-migration data, or first pull after the column was added).
+        Callers fall back to timestamp-based conflict resolution in that case.
+        """
+        conn = self._connect()
+        row = conn.execute(
+            "SELECT last_pulled_fields FROM sync_map WHERE local_id = ? AND source = ?",
+            (local_id, source),
+        ).fetchone()
+        if not row or not row["last_pulled_fields"]:
+            return None
+        try:
+            data = json.loads(row["last_pulled_fields"])
+            return data if isinstance(data, dict) else None
+        except (json.JSONDecodeError, TypeError):
+            return None
 
     def relabel_source_id(
         self, source: str, old_source_id: str, new_source_id: str

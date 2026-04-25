@@ -260,6 +260,69 @@ class TestTransaction:
             assert m.get_local_id("jira", "PROJ-2") is None
 
 
+class TestLastPulledFields:
+    def test_returns_none_when_never_set(self, mapping):
+        mapping.upsert("lid-1", "jira", "PROJ-1")
+        assert mapping.get_last_pulled_fields("lid-1", "jira") is None
+
+    def test_round_trips_dict(self, mapping):
+        snap = {"title": "X", "tags": ["a", "b"], "priority": "high"}
+        mapping.upsert("lid-1", "jira", "PROJ-1", last_pulled_fields=snap)
+        assert mapping.get_last_pulled_fields("lid-1", "jira") == snap
+
+    def test_unicode_preserved(self, mapping):
+        snap = {"title": "Ünïcödé 日本語"}
+        mapping.upsert("lid-1", "jira", "PROJ-1", last_pulled_fields=snap)
+        assert mapping.get_last_pulled_fields("lid-1", "jira") == snap
+
+    def test_omitting_kwarg_does_not_clear_existing_snapshot(self, mapping):
+        snap = {"title": "X"}
+        mapping.upsert("lid-1", "jira", "PROJ-1", last_pulled_fields=snap)
+        # Re-upsert without the kwarg — must not wipe the snapshot.
+        mapping.upsert("lid-1", "jira", "PROJ-1", source_updated_at="2024-01-01T00:00:00Z")
+        assert mapping.get_last_pulled_fields("lid-1", "jira") == snap
+
+    def test_legacy_db_without_column_auto_migrates(self, tmp_path):
+        """A pre-existing DB created before the snapshot column was added
+        must auto-add the column on next connect, not crash."""
+        db = tmp_path / "legacy.db"
+        # Simulate the OLD schema (no last_pulled_fields column)
+        import sqlite3
+        conn = sqlite3.connect(str(db))
+        conn.executescript("""
+            CREATE TABLE sync_map (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                local_id          TEXT NOT NULL,
+                source            TEXT NOT NULL,
+                source_id         TEXT NOT NULL,
+                last_synced_at    TEXT,
+                local_updated_at  TEXT,
+                source_updated_at TEXT,
+                UNIQUE(source, source_id)
+            );
+            CREATE TABLE sync_log (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp   TEXT NOT NULL,
+                source      TEXT NOT NULL,
+                action      TEXT NOT NULL,
+                item_count  INTEGER NOT NULL,
+                details     TEXT
+            );
+            INSERT INTO sync_map (local_id, source, source_id) VALUES ('lid-old', 'jira', 'OLD-1');
+        """)
+        conn.commit()
+        conn.close()
+
+        with SyncMapping(db) as m:
+            # Existing data still readable
+            assert m.get_local_id("jira", "OLD-1") == "lid-old"
+            # Snapshot column now present and queryable
+            assert m.get_last_pulled_fields("lid-old", "jira") is None
+            # Can write to the new column
+            m.upsert("lid-old", "jira", "OLD-1", last_pulled_fields={"title": "X"})
+            assert m.get_last_pulled_fields("lid-old", "jira") == {"title": "X"}
+
+
 class TestSyncLog:
     def test_log_and_retrieve(self, mapping):
         mapping.log_sync("jira", "pull", 42, "test details")

@@ -388,6 +388,61 @@ class TestMergePulledItems:
         # cycles to source-wins.
         assert local[0]["updated_date"] == "2024-01-01T11:00:00Z"
 
+    def test_per_field_diff_preserves_independent_local_and_source_edits(self, mapping):
+        """The original bug: timestamp-only resolution declared all fields
+        'both changed' if both sides had any edit. Now a snapshot lets us
+        diff per-field — local-only edits and source-only edits both survive.
+
+        T0: pull. snapshot stored.
+        T1: user edits title locally only.
+        T2: source changes priority only.
+        T3: pull. Title must stay local; priority must adopt source.
+        """
+        # T0 baseline pull
+        first_pulled = [_make_item(
+            "vikunja", "1",
+            title="Original", local_id="",
+            updated_date="2024-01-01T09:00:00Z",
+        )]
+        first_pulled[0]["priority"] = "low"
+        local, _ = merge_pulled_items([], first_pulled, mapping, "vikunja")
+        assert local[0]["title"] == "Original"
+        lid = local[0]["local_id"]
+
+        # T1 user edits title locally
+        local[0]["title"] = "MyEdit"
+        # T2 source independently changes priority
+        second_pulled = [_make_item(
+            "vikunja", "1",
+            title="Original",  # source's title unchanged
+            local_id="",
+            updated_date="2024-02-01T09:00:00Z",  # source's overall timestamp advanced
+        )]
+        second_pulled[0]["priority"] = "high"  # source-only change
+
+        # T3 pull
+        local, _ = merge_pulled_items(local, second_pulled, mapping, "vikunja")
+        item = local[0]
+        # Per-field correctness:
+        assert item["title"] == "MyEdit", "local-only title edit must survive"
+        assert item["priority"] == "high", "source-only priority change must apply"
+
+    def test_per_field_diff_source_wins_on_real_field_conflict(self, mapping):
+        """When BOTH sides edit the same field, source still wins (policy)."""
+        first_pulled = [_make_item(
+            "vikunja", "1", title="Original", local_id="",
+            updated_date="2024-01-01T09:00:00Z",
+        )]
+        local, _ = merge_pulled_items([], first_pulled, mapping, "vikunja")
+        local[0]["title"] = "LocalEdit"
+
+        second_pulled = [_make_item(
+            "vikunja", "1", title="SourceEdit", local_id="",
+            updated_date="2024-02-01T09:00:00Z",
+        )]
+        local, _ = merge_pulled_items(local, second_pulled, mapping, "vikunja")
+        assert local[0]["title"] == "SourceEdit"
+
     def test_no_winners_advances_updated_date_to_source(self, mapping):
         """When source wins (or no real conflict), in-item updated_date
         adopts source's — needed so the next cycle's last_synced comparison
