@@ -1010,11 +1010,11 @@ class TestUnifiedSchema:
         "category", "raw",
     }
     CATEGORY_KEYS = {"id", "name", "type"}
-    VALID_SOURCES = {"vikunja", "jira", "notion", "mstodo"}
+    VALID_SOURCES = {"vikunja", "jira", "notion", "mstodo", "plane"}
     VALID_STATUSES = {"todo", "in_progress", "done", "cancelled"}
     VALID_PRIORITIES = {"critical", "high", "medium", "low", "none"}
 
-    @pytest.fixture(params=["vikunja", "jira", "notion", "mstodo"])
+    @pytest.fixture(params=["vikunja", "jira", "notion", "mstodo", "plane"])
     def sample(self, request):
         source = request.param
         if source == "vikunja":
@@ -1028,6 +1028,18 @@ class TestUnifiedSchema:
                 raw = json.load(f)["results"][0]
             raw["_database_id"] = "db-1"
             raw["_database_title"] = "Board"
+        elif source == "plane":
+            with open(FIXTURES_DIR / "plane_issues.json") as f:
+                raw = json.load(f)["results"][0]
+            # plane.pull augments raw with these underscore-prefixed keys
+            # before normalize sees them
+            raw["_project_id"] = "proj-uuid-1"
+            raw["_project_name"] = "Backend"
+            raw["_state_name"] = "In Progress"
+            raw["_state_group"] = "started"
+            raw["_label_names"] = ["ci"]
+            raw["_workspace_slug"] = "ws"
+            raw["_base_url"] = "https://plane.example"
         else:
             with open(FIXTURES_DIR / "mstodo_tasks.json") as f:
                 raw = json.load(f)["value"][0]
