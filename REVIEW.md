@@ -47,7 +47,7 @@ Per-operation commits meant 2-3 fsyncs per item. `SyncMapping.transaction()` def
 
 ### Vikunja (verified against v2.3)
 
-**12. Labels actually sync; payload no longer carries dead fields** — `<latest>`
+**12. Labels actually sync; payload no longer carries dead fields** — `e19348e`
 End-to-end probe confirmed Vikunja silently ignores `labels` on task POST/PUT — the existing `payload["labels"]=...` did nothing. Local tag changes never propagated. Also confirmed `done_at` is server-managed (auto-stamped on `done=true`).
 
 Dropped `labels` and `done_at` from `_to_vikunja_payload`. Added `_fetch_all_labels` (workspace index, paginated), `_ensure_label` (cache + create-if-missing), and `_sync_task_labels` (diff current vs desired, attach via `PUT /tasks/{id}/labels`, detach via `DELETE`). Push pre-fetches the label index once.
