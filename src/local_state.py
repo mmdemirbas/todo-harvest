@@ -140,8 +140,21 @@ def merge_pulled_items(
     return list(local_by_id.values()), stats
 
 
-# Fields that participate in conflict resolution during merge
+# User-mutable fields that participate in conflict resolution during merge.
+# Local edits are preserved per resolve_conflict's policy.
 _MERGE_FIELDS = ("title", "description", "status", "priority", "due_date", "tags")
+
+# Source-owned metadata: copied straight from the pulled item. The local copy
+# cannot legitimately diverge from source for these (they're set by the remote
+# system on its own clock), so source always wins.
+_SOURCE_AUTHORITATIVE_FIELDS = (
+    "created_date",
+    "updated_date",
+    "completed_date",
+    "category",
+    "raw",
+    "url",
+)
 
 
 def _merge_fields(
@@ -181,8 +194,12 @@ def _merge_fields(
             local_item[field] = winner_val
             changed = True
 
-    # Always update raw and source-specific metadata
-    local_item["raw"] = pulled_item.get("raw", local_item.get("raw"))
-    local_item["url"] = pulled_item.get("url", local_item.get("url"))
+    for field in _SOURCE_AUTHORITATIVE_FIELDS:
+        if field not in pulled_item:
+            continue
+        new_val = pulled_item.get(field)
+        if new_val != local_item.get(field):
+            local_item[field] = new_val
+            changed = True
 
     return changed, conflicts

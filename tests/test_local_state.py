@@ -244,6 +244,69 @@ class TestMergePulledItems:
         assert "jira" in sources
         assert len(local) == 2
 
+    def test_completed_date_propagates_from_source(self, mapping):
+        """Source completing a task must update local completed_date — was missing from _MERGE_FIELDS."""
+        lid = mapping.generate_local_id()
+        mapping.upsert(lid, "vikunja", "1", source_updated_at="2024-01-01T00:00:00Z")
+        mapping.mark_synced(lid, "vikunja")
+
+        local_item = _make_item(
+            "vikunja", "1", local_id=lid, status="todo",
+            updated_date="2024-01-01T00:00:00Z",
+        )
+        local_item["completed_date"] = None
+
+        pulled = _make_item(
+            "vikunja", "1", status="done",
+            updated_date="2024-02-01T00:00:00Z",
+        )
+        pulled["completed_date"] = "2024-02-01T10:00:00Z"
+
+        local, stats = merge_pulled_items([local_item], [pulled], mapping, "vikunja")
+        assert stats["updated"] == 1
+        assert local[0]["status"] == "done"
+        assert local[0]["completed_date"] == "2024-02-01T10:00:00Z"
+
+    def test_category_propagates_from_source(self, mapping):
+        """Source moving a task to a new project must update local category."""
+        lid = mapping.generate_local_id()
+        mapping.upsert(lid, "vikunja", "1", source_updated_at="2024-01-01T00:00:00Z")
+        mapping.mark_synced(lid, "vikunja")
+
+        local_item = _make_item(
+            "vikunja", "1", local_id=lid,
+            updated_date="2024-01-01T00:00:00Z",
+        )
+        local_item["category"] = {"id": "1", "name": "OldProj", "type": "project"}
+
+        pulled = _make_item(
+            "vikunja", "1",
+            updated_date="2024-02-01T00:00:00Z",
+        )
+        pulled["category"] = {"id": "2", "name": "NewProj", "type": "project"}
+
+        local, stats = merge_pulled_items([local_item], [pulled], mapping, "vikunja")
+        assert stats["updated"] == 1
+        assert local[0]["category"]["name"] == "NewProj"
+
+    def test_updated_date_reflects_source_after_merge(self, mapping):
+        """After source-wins merge, local updated_date must reflect source — feeds next conflict cycle correctly."""
+        lid = mapping.generate_local_id()
+        mapping.upsert(lid, "vikunja", "1", source_updated_at="2024-01-01T00:00:00Z")
+        mapping.mark_synced(lid, "vikunja")
+
+        local_item = _make_item(
+            "vikunja", "1", title="Old", local_id=lid,
+            updated_date="2024-01-01T00:00:00Z",
+        )
+        pulled = _make_item(
+            "vikunja", "1", title="New",
+            updated_date="2024-02-15T00:00:00Z",
+        )
+
+        local, _ = merge_pulled_items([local_item], [pulled], mapping, "vikunja")
+        assert local[0]["updated_date"] == "2024-02-15T00:00:00Z"
+
     def test_corrupt_json_raises(self, tmp_path):
         """Corrupt state file must not be silently swallowed."""
         path = tmp_path / "bad.json"
