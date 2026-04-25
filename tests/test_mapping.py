@@ -209,6 +209,57 @@ class TestConflictResolution:
         assert mapping.get_local_id("jira", "PROJ-1") == "lid-2"
 
 
+class TestTransaction:
+    def test_writes_visible_within_block(self, mapping):
+        with mapping.transaction():
+            mapping.upsert("lid-1", "jira", "PROJ-1")
+            assert mapping.get_local_id("jira", "PROJ-1") == "lid-1"
+
+    def test_committed_after_block_exits(self, tmp_path):
+        db = tmp_path / "txn.db"
+        with SyncMapping(db) as m:
+            with m.transaction():
+                m.upsert("lid-1", "jira", "PROJ-1")
+        with SyncMapping(db) as m2:
+            assert m2.get_local_id("jira", "PROJ-1") == "lid-1"
+
+    def test_rolls_back_on_exception(self, tmp_path):
+        db = tmp_path / "txn.db"
+        with SyncMapping(db) as m:
+            m.upsert("lid-stable", "jira", "PROJ-Z")  # committed pre-block
+            with pytest.raises(RuntimeError):
+                with m.transaction():
+                    m.upsert("lid-1", "jira", "PROJ-1")
+                    m.upsert("lid-2", "jira", "PROJ-2")
+                    raise RuntimeError("boom")
+            assert m.get_local_id("jira", "PROJ-1") is None
+            assert m.get_local_id("jira", "PROJ-2") is None
+            assert m.get_local_id("jira", "PROJ-Z") == "lid-stable"
+
+    def test_reentrant_transactions_dont_double_commit(self, mapping):
+        """Inner transaction is a no-op; outer governs commit/rollback."""
+        with mapping.transaction():
+            mapping.upsert("lid-1", "jira", "PROJ-1")
+            with mapping.transaction():
+                mapping.upsert("lid-2", "jira", "PROJ-2")
+        assert mapping.get_local_id("jira", "PROJ-1") == "lid-1"
+        assert mapping.get_local_id("jira", "PROJ-2") == "lid-2"
+
+    def test_inner_exception_rolls_back_outer_too(self, tmp_path):
+        """Inner re-entrant transaction is a no-op, so an exception inside it
+        propagates and the outer block rolls back everything."""
+        db = tmp_path / "txn.db"
+        with SyncMapping(db) as m:
+            with pytest.raises(RuntimeError):
+                with m.transaction():
+                    m.upsert("lid-1", "jira", "PROJ-1")
+                    with m.transaction():
+                        m.upsert("lid-2", "jira", "PROJ-2")
+                        raise RuntimeError("boom inner")
+            assert m.get_local_id("jira", "PROJ-1") is None
+            assert m.get_local_id("jira", "PROJ-2") is None
+
+
 class TestSyncLog:
     def test_log_and_retrieve(self, mapping):
         mapping.log_sync("jira", "pull", 42, "test details")

@@ -9,9 +9,10 @@ from __future__ import annotations
 import re
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 
 DEFAULT_DB_PATH = Path("mapping.db")
@@ -58,6 +59,7 @@ class SyncMapping:
     def __init__(self, db_path: Path | str = DEFAULT_DB_PATH):
         self._db_path = str(db_path)
         self._conn: sqlite3.Connection | None = None
+        self._in_transaction = False
 
     def _connect(self) -> sqlite3.Connection:
         if self._conn is None:
@@ -92,12 +94,39 @@ class SyncMapping:
                 details     TEXT
             )
         """)
-        conn.commit()
+        self._commit()
 
     def close(self) -> None:
         if self._conn is not None:
             self._conn.close()
             self._conn = None
+
+    def _commit(self) -> None:
+        """Commit unless we're inside a deferred-commit transaction."""
+        if not self._in_transaction and self._conn is not None:
+            self._conn.commit()
+
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        """Batch writes inside the block into a single commit.
+
+        Per-operation commits become no-ops; the commit happens when the
+        block exits cleanly. An exception rolls back the entire batch.
+        Re-entrant calls are no-ops — the outermost block owns the commit.
+        """
+        if self._in_transaction:
+            yield
+            return
+        conn = self._connect()
+        self._in_transaction = True
+        try:
+            yield
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+        finally:
+            self._in_transaction = False
 
     def __enter__(self) -> SyncMapping:
         self._connect()
@@ -151,7 +180,7 @@ class SyncMapping:
             """,
             (local_id, source, source_id, source_updated_at, local_updated_at),
         )
-        conn.commit()
+        self._commit()
 
     def relabel_source_id(
         self, source: str, old_source_id: str, new_source_id: str
@@ -173,7 +202,7 @@ class SyncMapping:
             "UPDATE sync_map SET source_id = ? WHERE source = ? AND source_id = ?",
             (new_source_id, source, old_source_id),
         )
-        conn.commit()
+        self._commit()
 
     def mark_synced(self, local_id: str, source: str) -> None:
         """Update last_synced_at to now for a (local_id, source) pair."""
@@ -183,7 +212,7 @@ class SyncMapping:
             "UPDATE sync_map SET last_synced_at = ? WHERE local_id = ? AND source = ?",
             (now, local_id, source),
         )
-        conn.commit()
+        self._commit()
 
     def get_last_synced_at(self, local_id: str, source: str) -> str | None:
         """Get last_synced_at for a (local_id, source) pair."""
@@ -243,7 +272,7 @@ class SyncMapping:
             "INSERT INTO sync_log (timestamp, source, action, item_count, details) VALUES (?, ?, ?, ?, ?)",
             (_now_iso(), source, action, item_count, details),
         )
-        conn.commit()
+        self._commit()
 
     def get_sync_log(self, limit: int = 50) -> list[dict]:
         """Return recent sync log entries."""

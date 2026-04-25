@@ -260,6 +260,36 @@ class TestMergePulledItems:
         assert "jira" in sources
         assert len(local) == 2
 
+    def test_merge_writes_atomically_per_pull(self, tmp_path, monkeypatch):
+        """If merge raises mid-batch, no mapping rows survive — full rollback."""
+        from src.mapping import SyncMapping
+        db = tmp_path / "rollback.db"
+        with SyncMapping(db) as m:
+            pulled = [
+                _make_item("jira", "PROJ-1"),
+                _make_item("jira", "PROJ-2"),
+                _make_item("jira", "PROJ-3"),
+            ]
+            # Make the third upsert blow up
+            calls = {"n": 0}
+            real_upsert = m.upsert
+
+            def boom(*args, **kwargs):
+                calls["n"] += 1
+                if calls["n"] == 3:
+                    raise RuntimeError("simulated DB error mid-merge")
+                return real_upsert(*args, **kwargs)
+
+            monkeypatch.setattr(m, "upsert", boom)
+            with pytest.raises(RuntimeError):
+                merge_pulled_items([], pulled, m, "jira")
+
+        # Reopen and assert nothing committed
+        with SyncMapping(db) as m2:
+            assert m2.get_local_id("jira", "PROJ-1") is None
+            assert m2.get_local_id("jira", "PROJ-2") is None
+            assert m2.get_local_id("jira", "PROJ-3") is None
+
     def test_completed_date_propagates_from_source(self, mapping):
         """Source completing a task must update local completed_date — was missing from _MERGE_FIELDS."""
         lid = mapping.generate_local_id()

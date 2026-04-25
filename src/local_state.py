@@ -88,36 +88,25 @@ def merge_pulled_items(
             orphans_no_id.append(item)
 
     source_prefix = f"{source}-"
-    for pulled in pulled_items:
-        # Strip source prefix so mapping stores the raw external ID (e.g. "1",
-        # not "vikunja-1") — needed so push() can round-trip via the source API.
-        normalized_id = pulled["id"]
-        source_id = (
-            normalized_id[len(source_prefix):]
-            if normalized_id.startswith(source_prefix)
-            else normalized_id
-        )
-        local_id = mapping.get_local_id(source, source_id)
-
-        if local_id is None:
-            # New item — assign local_id, add to local state
-            local_id = mapping.generate_local_id()
-            pulled["local_id"] = local_id
-            mapping.upsert(
-                local_id, source, source_id,
-                source_updated_at=pulled.get("updated_date"),
-                local_updated_at=pulled.get("updated_date"),
+    # Batch all per-item mapping writes into one SQLite commit instead of
+    # 2-3 per item. For 1000 items this is the difference between ~3000 fsyncs
+    # and 1, and rolls back cleanly if any item raises mid-merge.
+    with mapping.transaction():
+        for pulled in pulled_items:
+            # Strip source prefix so mapping stores the raw external ID
+            # (e.g. "1", not "vikunja-1") — push round-trips via the source API.
+            normalized_id = pulled["id"]
+            source_id = (
+                normalized_id[len(source_prefix):]
+                if normalized_id.startswith(source_prefix)
+                else normalized_id
             )
-            mapping.mark_synced(local_id, source)
-            local_by_id[local_id] = pulled
-            stats["created"] += 1
-        else:
-            # Existing item — resolve conflicts field by field
-            pulled["local_id"] = local_id
-            local_item = local_by_id.get(local_id)
+            local_id = mapping.get_local_id(source, source_id)
 
-            if local_item is None:
-                # Mapping exists but local item was deleted — re-add
+            if local_id is None:
+                # New item — assign local_id, add to local state
+                local_id = mapping.generate_local_id()
+                pulled["local_id"] = local_id
                 mapping.upsert(
                     local_id, source, source_id,
                     source_updated_at=pulled.get("updated_date"),
@@ -127,20 +116,35 @@ def merge_pulled_items(
                 local_by_id[local_id] = pulled
                 stats["created"] += 1
             else:
-                # Merge fields
-                changed, field_conflicts = _merge_fields(local_item, pulled, mapping, local_id, source)
-                stats["conflicts"] += field_conflicts
-                if changed:
+                # Existing item — resolve conflicts field by field
+                pulled["local_id"] = local_id
+                local_item = local_by_id.get(local_id)
+
+                if local_item is None:
+                    # Mapping exists but local item was deleted — re-add
                     mapping.upsert(
                         local_id, source, source_id,
                         source_updated_at=pulled.get("updated_date"),
-                        local_updated_at=local_item.get("updated_date"),
+                        local_updated_at=pulled.get("updated_date"),
                     )
                     mapping.mark_synced(local_id, source)
-                    stats["updated"] += 1
+                    local_by_id[local_id] = pulled
+                    stats["created"] += 1
                 else:
-                    mapping.mark_synced(local_id, source)
-                    stats["skipped"] += 1
+                    # Merge fields
+                    changed, field_conflicts = _merge_fields(local_item, pulled, mapping, local_id, source)
+                    stats["conflicts"] += field_conflicts
+                    if changed:
+                        mapping.upsert(
+                            local_id, source, source_id,
+                            source_updated_at=pulled.get("updated_date"),
+                            local_updated_at=local_item.get("updated_date"),
+                        )
+                        mapping.mark_synced(local_id, source)
+                        stats["updated"] += 1
+                    else:
+                        mapping.mark_synced(local_id, source)
+                        stats["skipped"] += 1
 
     return list(local_by_id.values()) + orphans_no_id, stats
 
