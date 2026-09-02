@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-# The driver moved to `./run`, the name every project here uses. This shim keeps
-# `./todo` working while the muscle memory catches up; delete it when it stops
-# being typed.
-exec "$(dirname "$0")/run" "$@"

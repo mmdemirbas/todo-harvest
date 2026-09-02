@@ -8,7 +8,7 @@ Sync TODO items between Vikunja, Jira, Microsoft To Do, Notion, and Plane via a 
 git clone <repo-url> && cd todo-harvest
 cp config.example.yaml config.yaml
 # Edit config.yaml with your credentials (see sections below)
-./run pull
+./ctl pull
 ```
 
 The `todo` script (bash) creates a virtual environment on first run and installs all dependencies automatically. On Windows, use `harvest.ps1` from PowerShell — same arguments, same behavior.
@@ -17,24 +17,24 @@ The `todo` script (bash) creates a virtual environment on first run and installs
 
 ```bash
 # Sync commands (hit the network)
-./run pull                       # pull from all configured services
-./run pull jira mstodo           # pull from specific services
-./run push vikunja               # push local state to vikunja
-./run sync                       # pull all, then push all
+./ctl pull                       # pull from all configured services
+./ctl pull jira mstodo           # pull from specific services
+./ctl push vikunja               # push local state to vikunja
+./ctl sync                       # pull all, then push all
 
 # Local commands (no network)
-./run inspect projects           # list project/list/database IDs per source
-./run inspect projects vikunja   # just Vikunja — useful for default_project_id
-./run inspect stats              # task counts, field coverage, date ranges
-./run inspect fields jira        # unique status/priority/tag values
+./ctl inspect projects           # list project/list/database IDs per source
+./ctl inspect projects vikunja   # just Vikunja — useful for default_project_id
+./ctl inspect stats              # task counts, field coverage, date ranges
+./ctl inspect fields jira        # unique status/priority/tag values
 
-./run export                     # snapshot local state to JSON/CSV
-./run export --output-dir ~/out  # export to custom directory
+./ctl export                     # snapshot local state to JSON/CSV
+./ctl export --output-dir ~/out  # export to custom directory
 
 # Help
-./run help                       # grouped overview of all commands
-./run help pull                  # detailed help for one command
-./run --test                     # run tests with coverage report
+./ctl help                       # grouped overview of all commands
+./ctl help pull                  # detailed help for one command
+./ctl test                     # run tests with coverage report
 ```
 
 ### Local state
@@ -139,7 +139,7 @@ For self-hosted [Plane](https://plane.so) installations.
 3. Copy the token -> `config.yaml` -> `plane.api_token`
 4. Set `plane.base_url` to your Plane instance URL (e.g. `https://plane.example.com`)
 5. Set `plane.workspace_slug` to your workspace slug (from the URL after the domain)
-6. To push cross-source tasks into Plane, set `plane.default_project_id` to a project UUID. See `./run inspect projects plane`.
+6. To push cross-source tasks into Plane, set `plane.default_project_id` to a project UUID. See `./ctl inspect projects plane`.
 
 ## Notion credentials
 
@@ -249,13 +249,13 @@ docker compose exec vikunja /app/vikunja/vikunja user reset-password 1 -d
 | Error | Fix |
 |-------|-----|
 | "Config file not found" | Copy `config.example.yaml` to `config.yaml` |
-| "No command specified" | Use: `./run pull`, `./run push`, or `./run sync` |
+| "No command specified" | Use: `./ctl pull`, `./ctl push`, or `./ctl sync` |
 | Network timeout | The tool retries up to 3 times with exponential backoff |
 
 ## Development
 
 ```bash
-./run --test                                              # run tests
+./ctl test                                              # run tests
 .venv/bin/python -m pytest tests/test_normalizer.py -v        # specific test
 .venv/bin/python -m pytest --cov=src --cov-report=term-missing  # coverage
 ```

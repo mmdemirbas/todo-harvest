@@ -6,7 +6,7 @@ to be informal and occasionally slow.
 ## Running tests
 
 ```bash
-./run --test
+./ctl test
 # or directly:
 .venv/bin/python -m pytest -q
 ```
