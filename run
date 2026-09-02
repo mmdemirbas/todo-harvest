@@ -18,9 +18,20 @@ if sys.version_info < (3, 10):
     sys.exit(1)
 " || exit 1
 
-# Bootstrap venv on first run
-if [ ! -d "$VENV_DIR" ]; then
-    echo "First run — setting up virtual environment..."
+# Bootstrap the venv when there is not a working one.
+#
+# By whether its interpreter runs, not by whether the directory exists. A venv
+# records the absolute path it was built at, in `bin/activate` and in
+# `pyvenv.cfg`, so moving the checkout leaves a directory that is still there
+# and no longer works - which is how this script came to fail with
+# "exec: python: not found" while `.venv/bin/python` sat there working fine.
+if ! "$VENV_DIR/bin/python" -c "" 2>/dev/null; then
+    if [ -d "$VENV_DIR" ]; then
+        echo "The virtual environment does not run here — rebuilding it..."
+        rm -rf "$VENV_DIR"
+    else
+        echo "First run — setting up virtual environment..."
+    fi
     python3 -m venv "$VENV_DIR"
     "$VENV_DIR/bin/pip" install --quiet --upgrade pip
     "$VENV_DIR/bin/pip" install --quiet -r "$SCRIPT_DIR/requirements.txt"
@@ -29,14 +40,26 @@ if [ ! -d "$VENV_DIR" ]; then
     echo ""
 fi
 
-# Activate venv
-source "$VENV_DIR/bin/activate"
+# The venv's own interpreter, by path.
+#
+# Rather than `source activate` and then bare `python`: activate works by putting
+# a hardcoded absolute path on PATH, so it is the part that breaks when the
+# checkout moves. VIRTUAL_ENV is still exported, because tools look for it.
+export VIRTUAL_ENV="$VENV_DIR"
+PATH="$VENV_DIR/bin:$PATH"
+export PATH
+PYTHON="$VENV_DIR/bin/python"
+
+# `-m src.main` resolves against the import path, so the package has to be on it
+# whatever directory the caller is standing in. PYTHONPATH rather than a `cd`,
+# so a relative path passed as an argument still means what the caller meant.
+export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 
 # Route --test to pytest
 if [ "${1:-}" = "--test" ]; then
     shift
-    exec python -m pytest --cov=src --cov-report=term-missing "$@"
+    exec "$PYTHON" -m pytest --cov=src --cov-report=term-missing "$@"
 fi
 
 # Delegate everything else to main
-exec python -m src.main "$@"
+exec "$PYTHON" -m src.main "$@"
