@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="470" viewBox="0 0 1200 470" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14">
+  <defs>
+    <marker id="pull" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#2563eb"/></marker>
+    <marker id="push" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#16a34a"/></marker>
+    <style>
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace; font-size: 12.5px; }
+      .h { font-size: 16px; font-weight: 700; fill: #111827; }
+      .kind { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; fill: #6b7280; }
+      .name { font-size: 14px; font-weight: 700; fill: #111827; }
+      .sub { font-size: 12.5px; fill: #4b5563; }
+      .cap { font-size: 12.5px; fill: #6b7280; }
+      .lbl { font-size: 12px; fill: #374151; }
+      .pull { stroke: #2563eb; } .push { stroke: #16a34a; }
+    </style>
+  </defs>
+  <rect width="1200" height="470" rx="14" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="40" y="44" class="h">Five trackers, one local file: pull normalises into it, push writes resolved state back</text>
+
+  <!-- services column -->
+  <g transform="translate(40,80)">
+    <rect width="230" height="56" rx="10" fill="#f9fafb" stroke="#d1d5db"/><text x="14" y="22" class="kind">SELF-HOSTED</text><text x="14" y="44" class="name">Vikunja</text><text x="100" y="44" class="sub">pull + push</text>
+  </g>
+  <g transform="translate(40,150)">
+    <rect width="230" height="56" rx="10" fill="#f9fafb" stroke="#d1d5db"/><text x="14" y="22" class="kind">SELF-HOSTED</text><text x="14" y="44" class="name">Plane</text><text x="100" y="44" class="sub">pull + push</text>
+  </g>
+  <g transform="translate(40,220)">
+    <rect width="230" height="56" rx="10" fill="#f9fafb" stroke="#d1d5db"/><text x="14" y="22" class="kind">ATLASSIAN CLOUD</text><text x="14" y="44" class="name">Jira</text><text x="100" y="44" class="sub">pull</text>
+  </g>
+  <g transform="translate(40,290)">
+    <rect width="230" height="56" rx="10" fill="#f9fafb" stroke="#d1d5db"/><text x="14" y="22" class="kind">MICROSOFT GRAPH</text><text x="14" y="44" class="name">Microsoft To Do</text><text x="150" y="44" class="sub">pull</text>
+  </g>
+  <g transform="translate(40,360)">
+    <rect width="230" height="56" rx="10" fill="#f9fafb" stroke="#d1d5db"/><text x="14" y="22" class="kind">NOTION API</text><text x="14" y="44" class="name">Notion</text><text x="100" y="44" class="sub">pull, by design</text>
+  </g>
+
+  <!-- arrows: pull (blue, service -> state), push (green, state -> service) -->
+  <g fill="none" stroke-width="2">
+    <path class="pull" d="M270 100 C 380 100, 420 190, 520 200" marker-end="url(#pull)"/>
+    <path class="push" d="M520 214 C 420 214, 380 116, 270 116" marker-end="url(#push)"/>
+    <path class="pull" d="M270 170 C 380 170, 420 210, 520 226" marker-end="url(#pull)"/>
+    <path class="push" d="M520 240 C 420 240, 380 186, 270 186" marker-end="url(#push)"/>
+    <path class="pull" d="M270 248 C 400 248, 420 246, 520 252" marker-end="url(#pull)"/>
+    <path class="pull" d="M270 318 C 400 318, 420 286, 520 272" marker-end="url(#pull)"/>
+    <path class="pull" d="M270 388 C 400 388, 420 320, 520 292" marker-end="url(#pull)"/>
+  </g>
+  <text x="330" y="70" class="lbl" fill="#2563eb">pull: fetch, normalise, merge by timestamp</text>
+  <text x="330" y="452" class="lbl" fill="#16a34a">push: send resolved local state back</text>
+
+  <!-- local state -->
+  <g transform="translate(520,150)">
+    <rect width="300" height="190" rx="12" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+    <text x="16" y="26" class="kind">LOCAL STATE · THE SOURCE OF TRUTH</text>
+    <text x="16" y="52" class="name mono">output/todos.json</text>
+    <text x="16" y="72" class="sub">every task in the unified schema</text>
+    <text x="16" y="100" class="name mono">mapping.db</text>
+    <text x="16" y="120" class="sub">which local id is which task on which service</text>
+    <text x="16" y="152" class="sub">Conflicts: the newer timestamp wins.</text>
+    <text x="16" y="170" class="sub">Re-running pull merges; re-running push sends.</text>
+  </g>
+
+  <!-- unified schema -->
+  <g transform="translate(870,100)">
+    <rect width="290" height="290" rx="12" fill="#f0fdf4" stroke="#86efac"/>
+    <text x="16" y="26" class="kind">ONE SHAPE FOR EVERY TASK</text>
+    <g class="mono" transform="translate(16,50)" fill="#1f2937">
+      <text y="0">id          vikunja-42</text>
+      <text y="20">local_id    5e0b…</text>
+      <text y="40">title       Renew passport</text>
+      <text y="60">status      in_progress</text>
+      <text y="80">priority    high</text>
+      <text y="100">due_date    2026-10-03</text>
+      <text y="120">tags        [home, docs]</text>
+      <text y="140">category    Personal</text>
+      <text y="160">url         https://…/tasks/42</text>
+      <text y="180">completed_date  null</text>
+      <text y="200">raw         { the API's own payload }</text>
+    </g>
+    <text x="16" y="272" class="sub">Statuses and priorities are mapped per source;</text>
+    <text x="16" y="286" class="sub">custom names via status_map / priority_map.</text>
+  </g>
+  <path d="M820 245 L 868 245" stroke="#9ca3af" stroke-width="2" fill="none" marker-end="url(#pull)"/>
+</svg>

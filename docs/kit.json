@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/mmdemirbas/oku/main/kit/schema/project-kit.schema.json",
+  "name": "todo-harvest",
+  "description": "Sync tasks between Vikunja, Plane, Jira, Microsoft To Do and Notion through one local state file.",
+  "accent": "green",
+  "audience": "Reader",
+  "domains": ["web"],
+  "lang": "en",
+  "lang_fallback": ["en"],
+  "languages": [{ "code": "en", "label": "English" }],
+  "defaultLanguage": "en",
+  "skip_gitignored": true,
+  "rebuild_command": false
+}
