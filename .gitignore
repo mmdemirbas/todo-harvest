@@ -14,7 +14,8 @@ htmlcov/
 *.egg-info/
 dist/
 build/
-.ideatmp/
+.idea/
+tmp/
 
 # oku docs tree: the kit symlink points at the local install; dist/ is the build
 docs/_oku
