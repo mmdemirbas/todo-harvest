@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>todo-harvest — five task trackers, one local file, one schema</title>
+<meta name="description" content="Pull tasks from Vikunja, Plane, Jira, Microsoft To Do and Notion into one local state file in one schema, resolve conflicts by timestamp, and push the result back to the services that take writes.">
+<meta property="og:title" content="todo-harvest — five task trackers, one local file, one schema">
+<meta property="og:description" content="Pull tasks from Vikunja, Plane, Jira, Microsoft To Do and Notion into one local state file in one schema, resolve conflicts by timestamp, and push the result back to the services that take writes.">
+<meta property="og:image" content="https://mmdemirbas.github.io/todo-harvest/assets/flow.svg">
+<link rel="canonical" href="https://mmdemirbas.github.io/todo-harvest/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2316a34a'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+:root { --accent: #16a34a; --accent-2: #0ea5e9; --accent-on: #ffffff; --accent-ink-on-paper: #15803d; }
+@media (prefers-color-scheme: dark) { :root { --accent-ink-on-paper: #86efac; } }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="#"><span class="mark" aria-hidden="true"></span>todo-harvest</a>
+  <nav><a href="#how" class="">How it works</a><a href="#install" class="">Quick start</a><a href="#schema" class="hide-sm">Schema</a><a class="gh" href="https://github.com/mmdemirbas/todo-harvest" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a></nav>
+</div></header>
+
+<main>
+<section class="hero"><div class="wrap">
+  <p class="eyebrow">Command-line tool · Python · MIT</p>
+  <h1>Every task list you have, in one file you own.</h1>
+  <p class="lead">Work is in Jira, the team board is in Plane, the family list is in Microsoft To Do, notes with checkboxes are in Notion, and the self-hosted Vikunja was supposed to replace them all. todo-harvest pulls every one into one file in one schema, resolves conflicts by timestamp, and pushes the result back to the services that accept writes — no daemon, no account, one command at a time.</p>
+  <div class="cta"><a class="btn btn-solid" href="#install">Quick start</a><a class="btn btn-quiet" href="https://github.com/mmdemirbas/todo-harvest" rel=noopener><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>Source on GitHub</a></div>
+  <div class="stats"><div><b>5</b><span>sources: Vikunja, Plane, Jira, Microsoft To Do, Notion</span></div><div><b>2</b><span>push targets: Vikunja and Plane</span></div><div><b>1</b><span>schema, one JSON file, one SQLite mapping</span></div></div>
+  <div class="visual"><figure class="hero-fig frame plain"><img src="assets/flow.svg" alt="Five trackers on the left, the local state file in the middle, the unified schema on the right" loading="eager"></figure></div>
+</div></section>
+
+<section id="why"><div class="wrap">
+  <p class="pitch">Nothing polls and nothing runs in the background. <em>Local state is the source of truth</em>: a pull never overwrites a newer local edit, and a push never invents a task on a service that has no mapping unless you set a default project.</p>
+  <div class="features" style="margin-top: clamp(1.5rem, 4vw, 2.5rem)"><div class="feature"><div class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 10 5-10 5L2 7l10-5z"/><path d="m2 12 10 5 10-5"/><path d="m2 17 10 5 10-5"/></svg></div><h3>One schema</h3><p>id, title, status, priority, dates, tags, category, url — the same record whatever the source, and the service's own payload kept whole under <code>raw</code>.</p></div><div class="feature"><div class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3l4 4-4 4"/><path d="M3 7h18"/><path d="M7 21l-4-4 4-4"/><path d="M21 17H3"/></svg></div><h3>Pull from five, push to two</h3><p>Vikunja, Plane, Jira, Microsoft To Do and Notion in; Vikunja and Plane out. Jira and To Do pushes are not implemented yet, Notion is pull-only by design.</p></div><div class="feature"><div class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div><h3>Conflicts by timestamp</h3><p>An incoming task with a newer <code>updated_date</code> replaces the local copy; an older one is ignored. No merge dialogs.</p></div><div class="feature"><div class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></div><h3>Stable ids across services</h3><p><code>mapping.db</code> assigns one <code>local_id</code> on first sight and remembers which id the task has on each service, so a task created by a push is recognised on the next pull.</p></div><div class="feature"><div class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path d="M14 2v6h6"/></svg></div><h3>Your vocabulary</h3><p><code>status_map</code>, <code>priority_map</code> and Notion <code>field_map</code> for instances with their own status names, priorities and column titles.</p></div><div class="feature"><div class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l6-5-6-5"/><path d="M12 19h8"/></svg></div><h3>Explicit runs</h3><p><code>pull</code>, <code>push</code> and <code>sync</code> do exactly what they say; <code>inspect</code> and <code>export</code> never touch the network.</p></div></div>
+</div></section>
+
+<section id="how"><div class="wrap">
+  <div class="section-head"><h2>How a sync runs</h2><p>A pull, then a push; each step does one thing.</p></div>
+  <div class="how wide"><div></div><ol class="steps"><li><div><b>Fetch</b><p>Each configured source is queried through its own client — REST with three retries and exponential backoff. Jira uses the configured JQL; Notion, the listed databases; Plane, the listed or all projects.</p></div></li><li><div><b>Normalise and map</b><p>Every item becomes the unified record, status and priority mapped to the common values. <code>mapping.db</code> assigns a stable <code>local_id</code> on first sight.</p></div></li><li><div><b>Merge</b><p>A newer <code>updated_date</code> than the local copy replaces it; an older one is ignored. The result is written to <code>output/todos.json</code>.</p></div></li><li><div><b>Push</b><p>Tasks with a mapping on the target are updated in place; tasks from other sources are created there only if <code>default_project_id</code> is set. A new task's service id goes into <code>mapping.db</code>.</p></div></li></ol></div>
+  
+</div></section>
+<section id="install"><div class="wrap">
+  <div class="section-head"><h2>Quick start</h2><p>Python 3; <code>./ctl</code> creates a virtual environment on first run and installs the dependencies. On Windows, <code>harvest.ps1</code> takes the same arguments from PowerShell.</p></div>
+  <div class="install two"><div><h3>Run it</h3><pre class="code"><code>git clone https://github.com/mmdemirbas/todo-harvest.git &amp;&amp; cd todo-harvest
+cp config.example.yaml config.yaml    <span class="c"># fill in the services you use</span>
+./ctl pull                            <span class="c"># everything into output/todos.json</span>
+./ctl push vikunja                    <span class="c"># local state back to Vikunja</span>
+./ctl sync                            <span class="c"># pull all, then push all</span></code></pre><p class=note>Only configure the services you use; the rest are skipped. Each needs one token — the README walks through each service.</p></div><div><h3>config.yaml, the shape</h3><pre class="code"><code>vikunja:
+  base_url: &quot;http://localhost:3456&quot;
+  api_token: &quot;YOUR_API_TOKEN&quot;
+  <span class="c"># default_project_id: 1   # to create cross-source tasks here</span>
+
+jira:
+  base_url: &quot;https://YOUR_SUBDOMAIN.atlassian.net&quot;
+  email: &quot;your@email.com&quot;
+  api_token: &quot;YOUR_API_TOKEN&quot;
+  <span class="c"># status_map: { &quot;Custom Status&quot;: &quot;in_progress&quot; }</span>
+
+notion:
+  token: &quot;YOUR_INTEGRATION_SECRET&quot;
+  database_ids: [&quot;DATABASE_ID_1&quot;]
+  <span class="c"># field_map: { status: &quot;Status&quot;, due_date: &quot;Due Date&quot; }</span></code></pre><p class=note><code>config.yaml</code> holds the tokens and is git-ignored; <code>config.example.yaml</code> is the template.</p></div></div>
+</div></section>
+<section id="commands"><div class="wrap">
+  <div class="section-head"><h2>Commands</h2></div>
+  <div class="table-wrap"><table><thead><tr><th>Command</th><th>Network</th><th>Does</th></tr></thead><tbody><tr><td><code>./ctl pull [source…]</code></td><td>yes</td><td>Pull from every configured service, or the named ones, and merge</td></tr><tr><td><code>./ctl push vikunja</code> / <code>plane</code></td><td>yes</td><td>Push local state to one target</td></tr><tr><td><code>./ctl sync</code></td><td>yes</td><td>Pull all, then push all</td></tr><tr><td><code>./ctl inspect projects [source]</code></td><td>no</td><td>Project / list / database ids — for <code>default_project_id</code></td></tr><tr><td><code>./ctl inspect stats</code></td><td>no</td><td>Task counts, field coverage, date ranges</td></tr><tr><td><code>./ctl inspect fields jira</code></td><td>no</td><td>The status, priority and tag values a source uses</td></tr><tr><td><code>./ctl export [--output-dir DIR]</code></td><td>no</td><td>Snapshot local state to JSON and CSV</td></tr><tr><td><code>./ctl test</code></td><td>no</td><td>Tests with a coverage report</td></tr></tbody></table></div>
+</div></section><section id="schema"><div class="wrap">
+  <div class="section-head"><h2>The unified schema</h2><p>Every task becomes the same record; the source's full payload stays under <code>raw</code>.</p></div>
+  <div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Meaning</th></tr></thead><tbody><tr><td><code>id</code>, <code>local_id</code></td><td>string</td><td><code>{source}-{source_id}</code>, and the stable UUID assigned on first pull</td></tr><tr><td><code>source</code></td><td>string</td><td><code>vikunja</code>, <code>plane</code>, <code>jira</code>, <code>mstodo</code> or <code>notion</code></td></tr><tr><td><code>title</code>, <code>description</code></td><td>string</td><td>The task and its body</td></tr><tr><td><code>status</code></td><td>enum</td><td><code>todo</code>, <code>in_progress</code>, <code>done</code>, <code>cancelled</code></td></tr><tr><td><code>priority</code></td><td>enum</td><td><code>critical</code>, <code>high</code>, <code>medium</code>, <code>low</code>, <code>none</code></td></tr><tr><td><code>created_date</code>, <code>due_date</code>, <code>updated_date</code>, <code>completed_date</code></td><td>ISO 8601</td><td>Timestamps; <code>completed_date</code> from each service's own field, null for Notion</td></tr><tr><td><code>tags</code>, <code>category</code>, <code>url</code></td><td>list, object, string</td><td>Labels or list names; the organisational container; a link back to the original</td></tr><tr><td><code>raw</code></td><td>object</td><td>The original API payload — Jira's ADF description and custom fields, To Do's checklist items, every Notion property</td></tr></tbody></table></div>
+</div></section><section id="push"><div class="wrap">
+  <div class="section-head"><h2>What pushes back</h2><p><code>rw</code> is pull and push; <code>pull</code> is pull only.</p></div>
+  <div class="table-wrap"><table><thead><tr><th>Field</th><th>vikunja</th><th>plane</th><th>jira</th><th>mstodo</th><th>notion</th></tr></thead><tbody><tr><td>title, description</td><td>rw</td><td>rw</td><td>pull</td><td>pull</td><td>pull</td></tr><tr><td>priority, due_date</td><td>rw</td><td>rw</td><td>pull</td><td>pull</td><td>pull</td></tr><tr><td>status</td><td>rw</td><td>pull</td><td>pull</td><td>pull</td><td>pull</td></tr><tr><td>tags, category</td><td>rw</td><td>pull</td><td>pull</td><td>pull</td><td>pull</td></tr></tbody></table></div>
+</div></section><section id="files"><div class="wrap">
+  <div class="section-head"><h2>What lives where</h2></div>
+  <div class="table-wrap"><table><thead><tr><th>File</th><th>Holds</th><th>Commit it?</th></tr></thead><tbody><tr><td><code>config.yaml</code></td><td>Tokens and per-service options</td><td>No — it is in <code>.gitignore</code></td></tr><tr><td><code>output/todos.json</code></td><td>Every task in the unified schema, the local source of truth</td><td>Your call; it is your task list</td></tr><tr><td><code>mapping.db</code></td><td>SQLite: local id ↔ service id per source</td><td>Keep it with <code>todos.json</code>; deleting it re-maps everything on the next pull</td></tr><tr><td><code>output/*.csv</code>, <code>*.json</code></td><td>Export snapshots for spreadsheets or other tools</td><td>No</td></tr></tbody></table></div>
+</div></section>
+
+<section id="more"><div class="wrap">
+  <div class="section-head"><h2>Go deeper</h2></div>
+  <div class="links"><a class="link-card" href="https://github.com/mmdemirbas/todo-harvest#readme" rel=noopener><b>README</b><span>Getting a token from each of the five services, custom mappings, and every error message with its fix.</span><small>GitHub</small></a><a class="link-card" href="https://github.com/mmdemirbas/todo-harvest" rel=noopener><b>Source</b><span>One client per service under src/, a normaliser, a merger and the mapping database.</span><small>MIT licence</small></a><a class="link-card" href="https://github.com/mmdemirbas/todo-harvest/blob/main/CONTRIBUTING.md" rel=noopener><b>Contributing</b><span>Tests with pytest and respx; how to add a service.</span><small>CONTRIBUTING.md</small></a></div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+  <span>todo-harvest</span>
+  <span class="spacer"></span>
+  <a href="https://github.com/mmdemirbas/todo-harvest" rel="noopener">GitHub</a>
+  <a href="https://mdemirbas.com/en/projects/todo-harvest/" rel="noopener">Muhammed Demirbaş</a>
+  <a href="https://mdemirbas.com/" rel="noopener">Other projects</a>
+</div></footer>
+</body>
+</html>
