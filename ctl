@@ -7,6 +7,8 @@
 #   ./ctl                 the operations, one `name<TAB>description` per line
 #   ./ctl <verb> --list   what that verb takes - the service names, mostly
 #   ./ctl <verb> --help   a verb's own flags
+#   ./ctl --config <path> <verb> ...   the CLI's own options go in front
+#   ./ctl --version       the CLI's version
 #   ./ctl --check         whether ajans.toml and this file agree
 #
 # Listing reads ajans.toml only: it no longer builds the venv or runs Python
@@ -78,12 +80,49 @@ use_venv() {
 # naming the same set.
 cli() {
     use_venv
-    exec "$PYTHON" -m src.main "$@"
+    exec "$PYTHON" -m src.main ${CLI_OPTS[@]+"${CLI_OPTS[@]}"} "$@"
+}
+
+# Options in front of the operation are the CLI's own: `./ctl --config
+# other.yaml pull`, `./ctl --version`. The ajans block below dispatches on the
+# first word, so they are taken off here and cli() puts them back in front of
+# the command; with no operation after them they go to the CLI as they are.
+# tests/test_ctl.py holds this list to the parser's top-level options.
+CLI_OPTS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --config)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --config needs a path." >&2
+                exit 64
+            fi
+            CLI_OPTS+=("$1" "$2")
+            shift 2
+            ;;
+        --config=* | -V | --version)
+            CLI_OPTS+=("$1")
+            shift
+            ;;
+        *) break ;;
+    esac
+done
+if [[ $# -eq 0 && ${#CLI_OPTS[@]} -gt 0 ]]; then
+    cli
+fi
+
+# The operations the driver does by itself never reach the CLI; an option in
+# front of one is refused rather than dropped.
+no_cli_opts() {
+    if [[ ${#CLI_OPTS[@]} -gt 0 ]]; then
+        echo "Error: '$1' does not take ${CLI_OPTS[*]}; those are the CLI's options." >&2
+        exit 64
+    fi
 }
 
 # --- operations ------------------------------------------------------------
 
 op_test() {
+    no_cli_opts test
     use_venv
     exec "$PYTHON" -m pytest --cov=src --cov-report=term-missing "$@"
 }
@@ -91,6 +130,7 @@ op_test() {
 # use_venv only rebuilds a venv that does not run. This forces it, which is
 # what you want after editing requirements.
 op_setup() {
+    no_cli_opts setup
     need_python
     rm -rf "$VENV_DIR"
     build_venv
