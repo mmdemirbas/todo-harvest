@@ -1,0 +1,85 @@
+#:schema ../ajans/schema/project-2.schema.json
+contract = 2
+
+# Each operation is an op_ function in ctl. The verbs other than test and setup
+# are the CLI's own (src/main.py); tests/test_ctl.py holds the three to one set.
+
+[verbs]
+inspect = "Inspect local data without hitting any service"
+
+[operations.test]
+summary = "Run the test suite with coverage"
+
+[operations.setup]
+summary = "Rebuild the virtual environment from requirements"
+
+[operations.pull]
+summary = "Fetch tasks from every configured service into local state"
+needs = ["network"]
+
+[operations."pull vikunja"]
+summary = "Fetch tasks from Vikunja"
+needs = ["network"]
+
+[operations."pull jira"]
+summary = "Fetch tasks from Jira"
+needs = ["network"]
+
+[operations."pull mstodo"]
+summary = "Fetch tasks from Microsoft To Do"
+needs = ["network"]
+
+[operations."pull notion"]
+summary = "Fetch tasks from Notion"
+needs = ["network"]
+
+[operations."pull plane"]
+summary = "Fetch tasks from Plane"
+needs = ["network"]
+
+# Push targets are the services that take a push; the others say "not
+# supported, skipping", so a target for them would do nothing.
+[operations.push]
+summary = "Write local state back to every configured service that takes it"
+needs = ["network"]
+effects = ["publishes"]
+
+[operations."push vikunja"]
+summary = "Write local state back to Vikunja"
+needs = ["network"]
+effects = ["publishes"]
+
+[operations."push plane"]
+summary = "Write local state back to Plane"
+needs = ["network"]
+effects = ["publishes"]
+
+[operations.sync]
+summary = "Pull, then push, every configured service"
+needs = ["network"]
+effects = ["publishes"]
+
+[operations."sync vikunja"]
+summary = "Pull from Vikunja, then push to it"
+needs = ["network"]
+effects = ["publishes"]
+
+[operations."sync plane"]
+summary = "Pull from Plane, then push to it"
+needs = ["network"]
+effects = ["publishes"]
+
+[operations.export]
+summary = "Snapshot local state to JSON/CSV files"
+
+[operations."inspect projects"]
+summary = "Project / list / database IDs and names, for default_project_id"
+
+[operations."inspect stats"]
+summary = "Counts, field coverage, and date ranges per source"
+
+[operations."inspect fields"]
+summary = "Unique values of status, priority and tags per source"
+
+[operations.help]
+summary = "Grouped overview, or one command in detail"

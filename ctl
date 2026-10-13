@@ -1,152 +1,239 @@
 #!/usr/bin/env bash
 #
-# ./ctl — one entry point. Bootstraps the venv, then hands the verb to the CLI.
+# ./ctl — one entry point. Each operation is an op_ function below and
+# ajans.toml says what each one does; the ajans block at the end prints the
+# list from it and dispatches (contract: ajans/docs/project-contract.md).
 #
-#   ./ctl               the verbs, with what each one does
-#   ./ctl --list        the same, one `name<TAB>description` per line
-#   ./ctl <verb> --list what that verb takes - the service names, mostly
+#   ./ctl                 the operations, one `name<TAB>description` per line
+#   ./ctl <verb> --list   what that verb takes - the service names, mostly
+#   ./ctl <verb> --help   a verb's own flags
+#   ./ctl --check         whether ajans.toml and this file agree
 #
+# Listing reads ajans.toml only: it no longer builds the venv or runs Python
+# from the project.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$SCRIPT_DIR/.venv"
+# The venv's own interpreter, by path.
+#
+# Rather than `source activate` and then bare `python`: activate works by putting
+# a hardcoded absolute path on PATH, so it is the part that breaks when the
+# checkout moves.
+PYTHON="$VENV_DIR/bin/python"
 
-# Check Python is available
-if ! command -v python3 &>/dev/null; then
-    echo "Error: python3 not found. Install Python 3.10+ and try again." >&2
-    exit 1
-fi
-
-# Check Python version (need 3.10+)
-python3 -c "
+need_python() {
+    if ! command -v python3 &>/dev/null; then
+        echo "Error: python3 not found. Install Python 3.10+ and try again." >&2
+        exit 1
+    fi
+    python3 -c "
 import sys
 if sys.version_info < (3, 10):
     print(f'Error: Python 3.10+ required, found {sys.version}', file=sys.stderr)
     sys.exit(1)
 " || exit 1
+}
 
-# Bootstrap the venv when there is not a working one.
+build_venv() {
+    python3 -m venv "$VENV_DIR"
+    "$VENV_DIR/bin/pip" install --quiet --upgrade pip
+    "$VENV_DIR/bin/pip" install --quiet -r "$SCRIPT_DIR/requirements.txt"
+    "$VENV_DIR/bin/pip" install --quiet -r "$SCRIPT_DIR/requirements-dev.txt"
+}
+
+# Bootstrap the venv when there is not a working one, then put it in use.
 #
 # By whether its interpreter runs, not by whether the directory exists. A venv
 # records the absolute path it was built at, in `bin/activate` and in
 # `pyvenv.cfg`, so moving the checkout leaves a directory that is still there
 # and no longer works - which is how this script came to fail with
 # "exec: python: not found" while `.venv/bin/python` sat there working fine.
-if ! "$VENV_DIR/bin/python" -c "" 2>/dev/null; then
-    if [ -d "$VENV_DIR" ]; then
-        echo "The virtual environment does not run here — rebuilding it..."
-        rm -rf "$VENV_DIR"
-    else
-        echo "First run — setting up virtual environment..."
+use_venv() {
+    need_python
+    if ! "$PYTHON" -c "" 2>/dev/null; then
+        if [ -d "$VENV_DIR" ]; then
+            echo "The virtual environment does not run here — rebuilding it..."
+            rm -rf "$VENV_DIR"
+        else
+            echo "First run — setting up virtual environment..."
+        fi
+        build_venv
+        echo "Setup complete."
+        echo ""
     fi
-    python3 -m venv "$VENV_DIR"
-    "$VENV_DIR/bin/pip" install --quiet --upgrade pip
-    "$VENV_DIR/bin/pip" install --quiet -r "$SCRIPT_DIR/requirements.txt"
-    "$VENV_DIR/bin/pip" install --quiet -r "$SCRIPT_DIR/requirements-dev.txt"
-    echo "Setup complete."
-    echo ""
-fi
-
-# The venv's own interpreter, by path.
-#
-# Rather than `source activate` and then bare `python`: activate works by putting
-# a hardcoded absolute path on PATH, so it is the part that breaks when the
-# checkout moves. VIRTUAL_ENV is still exported, because tools look for it.
-export VIRTUAL_ENV="$VENV_DIR"
-PATH="$VENV_DIR/bin:$PATH"
-export PATH
-PYTHON="$VENV_DIR/bin/python"
-
-# `-m src.main` resolves against the import path, so the package has to be on it
-# whatever directory the caller is standing in. PYTHONPATH rather than a `cd`,
-# so a relative path passed as an argument still means what the caller meant.
-export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
-
-# --- what can be asked for -------------------------------------------------
-#
-# The verb list is read out of the CLI's own argparse rather than repeated here.
-# A list that is repeated is a list that goes stale; this one cannot.
-
-SHELL_VERBS="test	Run the test suite with coverage
-setup	Rebuild the virtual environment from requirements"
-
-list_verbs() {
-    printf '%s\n' "$SHELL_VERBS"
-    "$PYTHON" - <<'PYVERBS'
-from src.main import build_parser
-
-for action in build_parser()._subparsers._group_actions:
-    for choice in action._choices_actions:
-        if choice.dest != "help":
-            print(f"{choice.dest}\t{choice.help or ''}")
-PYVERBS
+    # VIRTUAL_ENV is still exported, because tools look for it.
+    export VIRTUAL_ENV="$VENV_DIR"
+    PATH="$VENV_DIR/bin:$PATH"
+    export PATH
+    # `-m src.main` resolves against the import path, so the package has to be
+    # on it whatever directory the caller is standing in. PYTHONPATH rather than
+    # a `cd`, so a relative path passed as an argument still means what the
+    # caller meant.
+    export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 }
 
-# A verb's qualifiers: the services for pull/push/sync, the targets for inspect.
-list_qualifiers() {
-    "$PYTHON" - "$1" <<'PYQUALS'
-import sys
-
-from src.config import SOURCES
-from src.main import build_parser
-
-verb = sys.argv[1]
-if verb in ("pull", "push", "sync"):
-    for source in SOURCES:
-        print(f"{source}\t")
-    sys.exit(0)
-
-for action in build_parser()._subparsers._group_actions:
-    sub = action.choices.get(verb)
-    if sub is None:
-        continue
-    for inner in getattr(sub, "_subparsers", None)._group_actions if sub._subparsers else []:
-        for choice in inner._choices_actions:
-            print(f"{choice.dest}\t{choice.help or ''}")
-    sys.exit(0)
-sys.exit(1)
-PYQUALS
+# The CLI's own commands (src/main.py). Every one of them is an operation
+# below; tests/test_ctl.py fails when a command, ajans.toml and this file stop
+# naming the same set.
+cli() {
+    use_venv
+    exec "$PYTHON" -m src.main "$@"
 }
 
-usage() {
-    echo "todo-harvest — ./ctl <verb> [args]"
-    echo ""
-    list_verbs | while IFS="$(printf '\t')" read -r name why; do
-        printf '  %-9s %s\n' "$name" "$why"
-    done
-    echo ""
-    echo "  What a verb takes:   ./ctl <verb> --list"
-    echo "  A verb's own flags:  ./ctl <verb> --help"
+# --- operations ------------------------------------------------------------
+
+op_test() {
+    use_venv
+    exec "$PYTHON" -m pytest --cov=src --cov-report=term-missing "$@"
 }
 
-# --- dispatch --------------------------------------------------------------
+# use_venv only rebuilds a venv that does not run. This forces it, which is
+# what you want after editing requirements.
+op_setup() {
+    need_python
+    rm -rf "$VENV_DIR"
+    build_venv
+    echo "Rebuilt $VENV_DIR"
+}
 
-cmd="${1:-}"; shift || true
+op_pull()         { cli pull "$@"; }
+op_pull_vikunja() { cli pull vikunja "$@"; }
+op_pull_jira()    { cli pull jira "$@"; }
+op_pull_mstodo()  { cli pull mstodo "$@"; }
+op_pull_notion()  { cli pull notion "$@"; }
+op_pull_plane()   { cli pull plane "$@"; }
 
-case "$cmd" in
-    ''|-h|--help)  usage; exit 0 ;;
-    --list)        list_verbs; exit 0 ;;
-esac
+op_push()         { cli push "$@"; }
+op_push_vikunja() { cli push vikunja "$@"; }
+op_push_plane()   { cli push plane "$@"; }
 
-# First position only: further along it belongs to the CLI.
-if [ "${1:-}" = "--list" ]; then
-    list_qualifiers "$cmd" || { echo "no qualifiers: $cmd" >&2; exit 1; }
-    exit 0
-fi
+op_sync()         { cli sync "$@"; }
+op_sync_vikunja() { cli sync vikunja "$@"; }
+op_sync_plane()   { cli sync plane "$@"; }
 
-case "$cmd" in
-    test)  exec "$PYTHON" -m pytest --cov=src --cov-report=term-missing "$@" ;;
-    setup)
-        # The bootstrap above only fires when the venv does not run. This forces
-        # it, which is what you want after editing requirements.
-        rm -rf "$VENV_DIR"
-        python3 -m venv "$VENV_DIR"
-        "$VENV_DIR/bin/pip" install --quiet --upgrade pip
-        "$VENV_DIR/bin/pip" install --quiet -r "$SCRIPT_DIR/requirements.txt"
-        "$VENV_DIR/bin/pip" install --quiet -r "$SCRIPT_DIR/requirements-dev.txt"
-        echo "Rebuilt $VENV_DIR"
-        exit 0
-        ;;
-esac
+op_export() { cli export "$@"; }
 
-exec "$PYTHON" -m src.main "$cmd" "$@"
+op_inspect_projects() { cli inspect projects "$@"; }
+op_inspect_stats()    { cli inspect stats "$@"; }
+op_inspect_fields()   { cli inspect fields "$@"; }
+
+op_help() { cli help "$@"; }
+
+# >>> ajans runtime 1 >>>
+# Written by `ajans contract sync`; edits here are overwritten. The operations
+# are declared in ajans.toml and implemented above as op_<verb>[_<target>].
+
+_ajans_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+_ajans_fn() {
+	local name="op_$*"
+	name="${name// /_}"
+	name="${name//-/_}"
+	printf '%s' "${name//./_}"
+}
+
+# Reads ajans.toml with the first python3 that has tomllib. Modes: list [verb], keys.
+_ajans_toml() {
+	local py
+	if [[ ! -f "$_ajans_root/ajans.toml" ]]; then
+		printf '✗ no ajans.toml beside %s\n' "$_ajans_root/ctl" >&2
+		return 66
+	fi
+	for py in python3 /opt/homebrew/bin/python3 /usr/local/bin/python3; do
+		if ! command -v "$py" >/dev/null 2>&1 || ! "$py" -c 'import tomllib' 2>/dev/null; then
+			continue
+		fi
+		"$py" - "$_ajans_root/ajans.toml" "$@" <<'PY'
+import re, sys, tomllib
+try:
+    with open(sys.argv[1], 'rb') as f:
+        manifest = tomllib.load(f)
+except tomllib.TOMLDecodeError as e:
+    sys.exit(f'✗ ajans.toml: {e}')
+ops, verbs = manifest.get('operations', {}), manifest.get('verbs', {})
+mode, rest = sys.argv[2], sys.argv[3:]
+if mode == 'keys':
+    for key in ops:
+        print('op_' + re.sub(r'[ .-]', '_', key))
+elif rest:
+    for key, op in ops.items():
+        verb, _, target = key.partition(' ')
+        if verb == rest[0] and target:
+            print(f"{target}\t{op.get('summary', '')}")
+else:
+    seen = []
+    for key in ops:
+        verb = key.partition(' ')[0]
+        if verb not in seen:
+            seen.append(verb)
+            print(f"{verb}\t{ops[verb]['summary'] if verb in ops else verbs.get(verb, '')}")
+PY
+		return
+	done
+	printf '✗ reading ajans.toml needs python3 3.11 or later (tomllib)\n' >&2
+	return 69
+}
+
+_ajans_check() {
+	local declared defined missing extra fn count noun
+	declared="$(_ajans_toml keys)" || return
+	declared="$(printf '%s\n' "$declared" | sort)"
+	defined="$(declare -F | awk '$3 ~ /^op_/ { print $3 }' | sort)"
+	missing="$(comm -23 <(printf '%s\n' "$declared") <(printf '%s\n' "$defined") | sed '/^$/d')"
+	extra="$(comm -13 <(printf '%s\n' "$declared") <(printf '%s\n' "$defined") | sed '/^$/d')"
+	if [[ -z "$missing" && -z "$extra" ]]; then
+		count="$(printf '%s\n' "$declared" | grep -c .)"
+		if [[ "$count" == 1 ]]; then noun=operation; else noun=operations; fi
+		printf '✓ ajans.toml and ctl agree: %s %s\n' "$count" "$noun"
+		return 0
+	fi
+	if [[ -n "$missing" ]]; then
+		while IFS= read -r fn; do printf '✗ declared, no function: %s\n' "$fn" >&2; done <<<"$missing"
+	fi
+	if [[ -n "$extra" ]]; then
+		while IFS= read -r fn; do printf '✗ function, not declared: %s\n' "$fn" >&2; done <<<"$extra"
+	fi
+	return 1
+}
+
+_ajans_main() {
+	case "${1:-}" in
+	'' | --list | -h | --help)
+		_ajans_toml list
+		return
+		;;
+	--check)
+		_ajans_check
+		return
+		;;
+	esac
+	if [[ "${2:-}" == --list ]]; then
+		_ajans_toml list "$1"
+		return
+	fi
+	local fn
+	if [[ $# -ge 2 ]]; then
+		fn="$(_ajans_fn "$1 $2")"
+		if declare -F "$fn" >/dev/null; then
+			shift 2
+			"$fn" "$@"
+			return
+		fi
+	fi
+	fn="$(_ajans_fn "$1")"
+	if declare -F "$fn" >/dev/null; then
+		shift
+		"$fn" "$@"
+		return
+	fi
+	if declare -F | awk -v p="$fn"_ '$3 ~ "^" p { found = 1 } END { exit !found }'; then
+		printf '✗ %s needs a target: ./ctl %s --list\n' "$1" "$1" >&2
+	else
+		printf '✗ %s: not an operation of this project (./ctl --list)\n' "$*" >&2
+	fi
+	return 64
+}
+
+_ajans_main "$@"
+# <<< ajans runtime <<<
